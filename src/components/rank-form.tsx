@@ -2,16 +2,19 @@
 
 import { useState } from "react";
 import { JobDescriptionInput } from "@/components/job-description-input";
+import { LiveResults } from "@/components/live-results";
 import { ResumeUpload } from "@/components/resume-upload";
 import { JOB_DESCRIPTION_MAX_CHARS, JOB_DESCRIPTION_MIN_CHARS, MAX_RESUMES } from "@/lib/limits";
+import { useLiveRanking } from "@/lib/use-live-ranking";
 import { useResumeFiles } from "@/lib/use-resume-files";
 
-// Live ranking ships in SHORT-03 and stays off until the server allows it.
-const LIVE_RANKING_ENABLED = false;
-
-export function RankForm() {
+// `liveEnabled` comes from the server: true only when ENABLE_REAL_RUNS, the
+// provider, and the rate limiter are all configured. No settings reach here.
+export function RankForm({ liveEnabled }: { liveEnabled: boolean }) {
   const [jobDescription, setJobDescription] = useState("");
   const { files, rejections, addFiles, removeFile, dismissRejections } = useResumeFiles();
+  const { state: run, start, cancel } = useLiveRanking();
+  const running = run.status === "running";
 
   const jobReady =
     jobDescription.length >= JOB_DESCRIPTION_MIN_CHARS &&
@@ -21,7 +24,15 @@ export function RankForm() {
   const resumesReady =
     files.length >= 1 && files.length <= MAX_RESUMES && parsing === 0 && failed === 0;
   const inputsReady = jobReady && resumesReady;
-  const canRank = inputsReady && LIVE_RANKING_ENABLED;
+  const canRank = inputsReady && liveEnabled && !running;
+
+  const rank = () => {
+    if (!canRank) return;
+    const resumes = files.flatMap((file) =>
+      file.status === "ready" ? [{ id: `f${file.id}`, fileName: file.name, text: file.text }] : [],
+    );
+    void start(jobDescription, resumes);
+  };
 
   let resumeStatus = "Add at least one PDF resume.";
   if (parsing) resumeStatus = `Reading ${parsing} ${parsing === 1 ? "PDF" : "PDFs"}…`;
@@ -50,18 +61,35 @@ export function RankForm() {
         <div className="mt-4 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
           <button
             type="button"
+            onClick={rank}
             disabled={!canRank}
-            className="rounded-lg bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-600 disabled:shadow-none"
+            className="rounded-lg bg-teal-700 px-5 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-teal-800 disabled:cursor-not-allowed disabled:bg-stone-300 disabled:text-stone-600 disabled:shadow-none"
           >
-            Rank
+            {running ? "Ranking…" : "Rank"}
           </button>
-          <p className="text-sm text-stone-600" aria-live="polite">
-            {inputsReady
-              ? "Inputs are ready, but live ranking isn't enabled in this demo yet."
-              : "Live ranking isn't enabled in this demo yet."}
-          </p>
+          {running && (
+            <button
+              type="button"
+              onClick={cancel}
+              className="rounded-lg border border-stone-300 px-4 py-2.5 text-sm font-medium text-stone-700 hover:bg-stone-100"
+            >
+              Cancel
+            </button>
+          )}
+          {!liveEnabled && (
+            <p className="text-sm text-stone-600">Live ranking isn&apos;t enabled on this deployment. Try the sample data above.</p>
+          )}
         </div>
+        {liveEnabled && (
+          <p className="mt-3 text-xs leading-relaxed text-stone-500">
+            Demo limits: 3 live rankings per network per day (resets 00:00 UTC), using a rate-limited, spending-capped
+            API key. Clicking Rank sends the extracted text, never the PDF files, to Anthropic for scoring. Nothing is
+            stored after the request ends.
+          </p>
+        )}
       </div>
+
+      <LiveResults state={run} />
     </div>
   );
 }

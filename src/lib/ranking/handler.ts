@@ -1,36 +1,34 @@
 import { MAX_REQUEST_BODY_BYTES } from "@/lib/limits";
+import type { RankEvent } from "@/lib/ranking/events";
+import type { Logger } from "@/lib/ranking/log";
+import type { RunLimiter } from "@/lib/ranking/rate-limit";
 import { readBodyWithLimit } from "@/lib/ranking/read-body";
+import { runRanking } from "@/lib/ranking/run";
 import { RankRequestSchema } from "@/lib/ranking/schema";
-import { rankResumes, type Scorer } from "@/lib/ranking/score";
-
-// Logs carry only counts and codes, never job descriptions, resume text,
-// file names, or error messages that could echo them.
-export type Logger = (event: string, fields: Record<string, number | string | boolean>) => void;
-
-export const consoleLogger: Logger = (event, fields) => {
-  console.info(JSON.stringify({ event, ...fields }));
-};
+import type { Scorer } from "@/lib/ranking/score";
 
 export type RankHandlerDeps = {
   isEnabled: () => boolean;
   getScorer: () => Scorer | null;
+  getLimiter: () => RunLimiter | null;
+  clientId: (request: Request) => string;
   log: Logger;
 };
 
-function errorResponse(status: number, code: string, message: string, extra?: object) {
+function errorResponse(status: number, code: string, message: string, extra?: object, headers?: HeadersInit) {
   return Response.json(
     { error: { code, message, ...extra } },
-    { status, headers: { "Cache-Control": "no-store" } },
+    { status, headers: { "Cache-Control": "no-store", ...headers } },
   );
 }
 
-// Built as a factory so tests can pass a fake scorer and gate. The public
-// route (app/api/rank/route.ts) wires in the real ones only.
-export function createRankHandler({ isEnabled, getScorer, log }: RankHandlerDeps) {
+// Built as a factory so tests can pass fakes. The public route
+// (app/api/rank/route.ts) wires in the real gate, provider, and limiter only.
+export function createRankHandler({ isEnabled, getScorer, getLimiter, clientId, log }: RankHandlerDeps) {
   return async function POST(request: Request): Promise<Response> {
-    const reject = (status: number, code: string, message: string, extra?: object) => {
+    const reject = (status: number, code: string, message: string, extra?: object, headers?: HeadersInit) => {
       log("rank.rejected", { status, code });
-      return errorResponse(status, code, message, extra);
+      return errorResponse(status, code, message, extra, headers);
     };
 
     // Gate first: a disabled deployment reads nothing and calls nothing.
@@ -40,6 +38,11 @@ export function createRankHandler({ isEnabled, getScorer, log }: RankHandlerDeps
     const scorer = getScorer();
     if (!scorer) {
       return reject(503, "scoring_not_configured", "No scoring provider is configured on this deployment.");
+    }
+    // No rate limiter means no protection: refuse rather than run unmetered.
+    const limiter = getLimiter();
+    if (!limiter) {
+      return reject(503, "rate_limit_unavailable", "Live ranking is temporarily unavailable.");
     }
 
     if (!request.headers.get("content-type")?.toLowerCase().startsWith("application/json")) {
@@ -70,13 +73,77 @@ export function createRankHandler({ isEnabled, getScorer, log }: RankHandlerDeps
       return reject(400, "invalid_request", "The request didn't pass validation.", { issues });
     }
 
+    // One unit of the daily allowance per valid run, before any model call.
+    let decision;
+    try {
+      decision = await limiter.consume(clientId(request));
+    } catch {
+      return reject(503, "rate_limit_unavailable", "Live ranking is temporarily unavailable.");
+    }
+    if (!decision.allowed) {
+      const retryAfter = Math.max(1, Math.ceil((decision.reset - Date.now()) / 1000));
+      return reject(
+        429,
+        "rate_limited",
+        `This demo allows ${decision.limit} live rankings per day. Try again after 00:00 UTC, or use the sample data.`,
+        { resetsAt: decision.reset },
+        { "Retry-After": String(retryAfter) },
+      );
+    }
+
+    // Stops scheduling model calls when the browser disconnects or cancels.
+    const run = new AbortController();
+    request.signal?.addEventListener("abort", () => run.abort(), { once: true });
+    const encoder = new TextEncoder();
     const started = Date.now();
-    const results = await rankResumes(parsed.data, scorer);
-    log("rank.completed", {
-      resumes: results.length,
-      failed: results.filter((outcome) => !outcome.ok).length,
-      ms: Date.now() - started,
+    const { resumes } = parsed.data;
+
+    const stream = new ReadableStream<Uint8Array>({
+      async start(controller) {
+        const send = (event: RankEvent) => {
+          if (run.signal.aborted) return;
+          try {
+            controller.enqueue(encoder.encode(JSON.stringify(event) + "\n"));
+          } catch {
+            run.abort(); // the reader is gone
+          }
+        };
+
+        send({ type: "start", total: resumes.length, runsLeftToday: decision.remaining, resetsAt: decision.reset });
+        const summary = await runRanking({
+          request: parsed.data,
+          scorer,
+          signal: run.signal,
+          emit: (outcome) => send({ type: "result", outcome }),
+        });
+        if (summary.stopped) send({ type: "stopped", reason: "provider_rejected" });
+        send({ type: "done", scored: summary.scored, failed: summary.failed });
+
+        log("rank.completed", {
+          resumes: resumes.length,
+          scored: summary.scored,
+          failed: summary.failed,
+          stopped: summary.stopped,
+          cancelled: summary.cancelled,
+          ms: Date.now() - started,
+        });
+        try {
+          controller.close();
+        } catch {
+          // already closed by a cancelled reader
+        }
+      },
+      cancel() {
+        run.abort();
+      },
     });
-    return Response.json({ results }, { headers: { "Cache-Control": "no-store" } });
+
+    return new Response(stream, {
+      headers: {
+        "Content-Type": "application/x-ndjson; charset=utf-8",
+        "Cache-Control": "no-store",
+        "X-Accel-Buffering": "no",
+      },
+    });
   };
 }

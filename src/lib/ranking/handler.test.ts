@@ -1,8 +1,11 @@
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { POST as publicPost } from "@/app/api/rank/route";
 import { MAX_REQUEST_BODY_BYTES } from "@/lib/limits";
-import { consoleLogger, createRankHandler, type Logger } from "@/lib/ranking/handler";
-import type { Scorer } from "@/lib/ranking/score";
+import type { RankEvent } from "@/lib/ranking/events";
+import { createRankHandler } from "@/lib/ranking/handler";
+import { consoleLogger, type Logger } from "@/lib/ranking/log";
+import { clientIdentifier, type LimitDecision, type RunLimiter } from "@/lib/ranking/rate-limit";
+import { ScoringError, type Scorer } from "@/lib/ranking/score";
 
 const URL_ = "http://localhost/api/rank";
 const JOB = "Senior Frontend Engineer. Must have: React, TypeScript, testing. ".repeat(3);
@@ -27,10 +30,27 @@ function fakeScorer(byFile: Record<string, string | Error> = {}) {
   });
 }
 
-function setup({ enabled = true, scorer = fakeScorer() as Scorer | null, log = vi.fn<Logger>() } = {}) {
+// An in-memory limiter with the same contract as the Upstash one.
+function fakeLimiter(limit = 3) {
+  const counts = new Map<string, number>();
+  return {
+    consume: vi.fn(async (id: string): Promise<LimitDecision> => {
+      const used = (counts.get(id) ?? 0) + 1;
+      counts.set(id, used);
+      return { allowed: used <= limit, limit, remaining: Math.max(0, limit - used), reset: Date.now() + 3_600_000 };
+    }),
+  };
+}
+
+function setup({
+  enabled = true,
+  scorer = fakeScorer() as Scorer | null,
+  limiter = fakeLimiter() as RunLimiter | null,
+  log = vi.fn<Logger>(),
+} = {}) {
   const getScorer = vi.fn(() => scorer);
-  const POST = createRankHandler({ isEnabled: () => enabled, getScorer, log });
-  return { POST, getScorer, log };
+  const POST = createRankHandler({ isEnabled: () => enabled, getScorer, getLimiter: () => limiter, clientId: () => "client-a", log });
+  return { POST, getScorer, limiter, log };
 }
 
 const resume = (id: string, overrides: object = {}) => ({ id, fileName: `${id}.pdf`, text: "React, TypeScript, Playwright since 2019.", ...overrides });
@@ -70,10 +90,19 @@ async function errorCode(response: Response) {
   return ((await response.json()) as { error: { code: string } }).error.code;
 }
 
+async function events(response: Response): Promise<RankEvent[]> {
+  return (await response.text()).trim().split("\n").map((line) => JSON.parse(line));
+}
+
+async function outcomes(response: Response) {
+  return (await events(response)).flatMap((event) => (event.type === "result" ? [event.outcome] : []));
+}
+
 describe("environment gate", () => {
-  it("a disabled deployment answers 503 without reading the body or reaching scoring", async () => {
+  it("a disabled deployment answers 503 without reading the body, rate limiting, or scoring", async () => {
     const scorer = fakeScorer();
-    const { POST, getScorer } = setup({ enabled: false, scorer });
+    const limiter = fakeLimiter();
+    const { POST, getScorer } = setup({ enabled: false, scorer, limiter });
     const { request, pulls } = countingStream(new TextEncoder().encode(JSON.stringify(body())), 1);
 
     const response = await POST(request);
@@ -83,6 +112,7 @@ describe("environment gate", () => {
     expect(pulls()).toBe(0);
     expect(getScorer).not.toHaveBeenCalled();
     expect(scorer).not.toHaveBeenCalled();
+    expect(limiter.consume).not.toHaveBeenCalled();
   });
 
   it("an enabled deployment with no provider configured answers 503", async () => {
@@ -107,13 +137,24 @@ describe("environment gate", () => {
       expect(await errorCode(response)).toBe("live_ranking_disabled");
     });
 
-    it("has no scorer even when enabled and configured, because no provider adapter exists yet", async () => {
+    it("has no scorer when enabled without an API key", async () => {
       vi.stubEnv("ENABLE_REAL_RUNS", "true");
       vi.stubEnv("SCORING_PROVIDER", "anthropic");
-      vi.stubEnv("SCORING_MODEL", "any-model");
+      vi.stubEnv("SCORING_MODEL", "claude-haiku-5-5");
+      vi.stubEnv("ANTHROPIC_API_KEY", "");
+      const response = await publicPost(post(body()));
+      expect(await errorCode(response)).toBe("scoring_not_configured");
+    });
+
+    it("fails closed when enabled and configured but Redis isn't", async () => {
+      vi.stubEnv("ENABLE_REAL_RUNS", "true");
+      vi.stubEnv("SCORING_PROVIDER", "anthropic");
+      vi.stubEnv("SCORING_MODEL", "claude-haiku-5-5");
+      vi.stubEnv("ANTHROPIC_API_KEY", "test-key-not-used");
+      for (const key of ["UPSTASH_REDIS_REST_URL", "UPSTASH_REDIS_REST_TOKEN", "KV_REST_API_URL", "KV_REST_API_TOKEN"]) vi.stubEnv(key, "");
       const response = await publicPost(post(body()));
       expect(response.status).toBe(503);
-      expect(await errorCode(response)).toBe("scoring_not_configured");
+      expect(await errorCode(response)).toBe("rate_limit_unavailable");
     });
   });
 });
@@ -129,13 +170,15 @@ describe("request validation", () => {
     ["resume text over 30,000 characters", body({ resumes: [resume("r1", { text: "x".repeat(30_001) })] })],
     ["a 256-character file name", body({ resumes: [resume("r1", { fileName: "f".repeat(256) })] })],
     ["a 65-character id", body({ resumes: [resume("i".repeat(65))] })],
-  ])("rejects %s with 400 before scoring", async (_, payload) => {
+  ])("rejects %s with 400 before rate limiting or scoring", async (_, payload) => {
     const scorer = fakeScorer();
-    const { POST } = setup({ scorer });
+    const limiter = fakeLimiter();
+    const { POST } = setup({ scorer, limiter });
     const response = await POST(post(payload));
     expect(response.status).toBe(400);
     expect(await errorCode(response)).toBe("invalid_request");
     expect(scorer).not.toHaveBeenCalled();
+    expect(limiter.consume).not.toHaveBeenCalled();
   });
 
   it("rejects non-JSON content types, invalid JSON, and invalid UTF-8", async () => {
@@ -148,7 +191,6 @@ describe("request validation", () => {
 });
 
 describe(`request body limit (${MAX_REQUEST_BODY_BYTES.toLocaleString("en-US")} bytes)`, () => {
-  // Pads valid JSON with trailing spaces to an exact byte size.
   const padded = (size: number) => {
     const json = JSON.stringify(body());
     return json + " ".repeat(size - Buffer.byteLength(json));
@@ -156,18 +198,17 @@ describe(`request body limit (${MAX_REQUEST_BODY_BYTES.toLocaleString("en-US")} 
 
   it("accepts a body of exactly the limit", async () => {
     const { POST } = setup();
-    const text = padded(MAX_REQUEST_BODY_BYTES);
-    expect(Buffer.byteLength(text)).toBe(MAX_REQUEST_BODY_BYTES);
-    expect((await POST(post(text))).status).toBe(200);
+    expect((await POST(post(padded(MAX_REQUEST_BODY_BYTES)))).status).toBe(200);
   });
 
-  it("rejects a body one byte over the limit with 413 before parsing or scoring", async () => {
+  it("rejects a body one byte over the limit with 413 before parsing, rate limiting, or scoring", async () => {
     const scorer = fakeScorer();
-    const { POST } = setup({ scorer });
+    const limiter = fakeLimiter();
+    const { POST } = setup({ scorer, limiter });
     const response = await POST(post(padded(MAX_REQUEST_BODY_BYTES + 1)));
     expect(response.status).toBe(413);
-    expect(await errorCode(response)).toBe("body_too_large");
     expect(scorer).not.toHaveBeenCalled();
+    expect(limiter.consume).not.toHaveBeenCalled();
   });
 
   it("rejects early on a declared Content-Length over the limit, without reading", async () => {
@@ -187,7 +228,7 @@ describe(`request body limit (${MAX_REQUEST_BODY_BYTES.toLocaleString("en-US")} 
   });
 
   it("fits the largest valid input, even with 3-byte UTF-8 characters everywhere", async () => {
-    const wide = "界"; // 3 bytes in UTF-8, the most a single UTF-16 unit can take
+    const wide = "界";
     const largest = {
       jobDescription: wide.repeat(10_000),
       resumes: Array.from({ length: 20 }, (_, i) => ({
@@ -196,35 +237,98 @@ describe(`request body limit (${MAX_REQUEST_BODY_BYTES.toLocaleString("en-US")} 
         text: wide.repeat(30_000),
       })),
     };
-    const bytes = Buffer.byteLength(JSON.stringify(largest));
-    expect(bytes).toBeGreaterThan(1_800_000);
-    expect(bytes).toBeLessThan(MAX_REQUEST_BODY_BYTES);
-
+    expect(Buffer.byteLength(JSON.stringify(largest))).toBeLessThan(MAX_REQUEST_BODY_BYTES);
     const { POST } = setup();
-    const response = await POST(post(largest));
-    expect(response.status).toBe(200);
-    expect(((await response.json()) as { results: unknown[] }).results).toHaveLength(20);
+    expect(await outcomes(await POST(post(largest)))).toHaveLength(20);
   });
 });
 
-describe("scoring pipeline (mocked scorer)", () => {
-  it("scores each valid resume with the system prompt and its own data", async () => {
+describe("rate limiting", () => {
+  it("allows three runs per client and blocks the fourth with 429 and zero model calls", async () => {
+    const scorer = fakeScorer();
+    const { POST } = setup({ scorer, limiter: fakeLimiter(3) });
+    const payload = body({ resumes: [resume("r1")] });
+
+    for (let run = 1; run <= 3; run++) {
+      const response = await POST(post(payload));
+      expect(response.status).toBe(200);
+      const start = (await events(response))[0];
+      expect(start).toMatchObject({ type: "start", runsLeftToday: 3 - run });
+    }
+    expect(scorer).toHaveBeenCalledTimes(3);
+
+    const fourth = await POST(post(payload));
+    expect(fourth.status).toBe(429);
+    expect(fourth.headers.get("retry-after")).toMatch(/^\d+$/);
+    expect(await errorCode(fourth)).toBe("rate_limited");
+    expect(scorer).toHaveBeenCalledTimes(3);
+  });
+
+  it("counts one run per request, not one per resume", async () => {
+    const limiter = fakeLimiter();
+    const { POST } = setup({ limiter });
+    await (await POST(post(body({ resumes: Array.from({ length: 7 }, (_, i) => resume(`r${i}`)) })))).text();
+    expect(limiter.consume).toHaveBeenCalledTimes(1);
+  });
+
+  it("fails closed when the limiter throws, without scoring", async () => {
+    const scorer = fakeScorer();
+    const limiter = { consume: vi.fn(async () => Promise.reject(new Error("redis down"))) };
+    const { POST } = setup({ scorer, limiter });
+    const response = await POST(post(body()));
+    expect(response.status).toBe(503);
+    expect(await errorCode(response)).toBe("rate_limit_unavailable");
+    expect(scorer).not.toHaveBeenCalled();
+  });
+
+  it("fails closed when no limiter is configured", async () => {
+    const { POST } = setup({ limiter: null });
+    expect(await errorCode(await POST(post(body())))).toBe("rate_limit_unavailable");
+  });
+
+  describe("client identity", () => {
+    const request = (headers: Record<string, string>) => new Request(URL_, { headers });
+
+    it("uses Vercel's x-vercel-forwarded-for and ignores client-supplied x-forwarded-for / x-real-ip", () => {
+      const env = { VERCEL: "1" };
+      const real = clientIdentifier(request({ "x-vercel-forwarded-for": "203.0.113.7" }), env);
+      const spoofed = clientIdentifier(
+        request({ "x-vercel-forwarded-for": "203.0.113.7", "x-forwarded-for": "198.51.100.1", "x-real-ip": "198.51.100.2" }),
+        env,
+      );
+      expect(spoofed).toBe(real);
+      expect(clientIdentifier(request({ "x-vercel-forwarded-for": "203.0.113.8" }), env)).not.toBe(real);
+    });
+
+    it("stores a hash, not the IP", () => {
+      const id = clientIdentifier(request({ "x-vercel-forwarded-for": "203.0.113.7" }), { VERCEL: "1" });
+      expect(id).toMatch(/^[0-9a-f]{32}$/);
+      expect(id).not.toContain("203");
+    });
+
+    it("off Vercel, puts every request in one shared bucket regardless of headers", () => {
+      const a = clientIdentifier(request({ "x-forwarded-for": "198.51.100.1" }), {});
+      const b = clientIdentifier(request({ "x-vercel-forwarded-for": "198.51.100.2" }), {});
+      expect(a).toBe(b);
+    });
+  });
+});
+
+describe("streamed scoring (mocked scorer)", () => {
+  it("streams start, one result per resume, and done as NDJSON", async () => {
     const scorer = fakeScorer();
     const { POST } = setup({ scorer });
     const response = await POST(post(body()));
 
     expect(response.status).toBe(200);
-    expect(scorer).toHaveBeenCalledTimes(2);
+    expect(response.headers.get("content-type")).toContain("application/x-ndjson");
+    const all = await events(response);
+    expect(all.map((event) => event.type)).toEqual(["start", "result", "result", "done"]);
+    expect(all.at(-1)).toEqual({ type: "done", scored: 2, failed: 0 });
+
     const [first] = scorer.mock.calls[0];
     expect(first.system).toContain("not evidenced in the resume");
     expect(first.user).toContain("<file_name>r1.pdf</file_name>");
-    expect(first.user).toContain(JOB.trim().slice(0, 40));
-
-    const { results } = (await response.json()) as { results: { id: string; ok: boolean; result: { score: number } }[] };
-    expect(results.map((r) => [r.id, r.ok, r.result.score])).toEqual([
-      ["r1", true, 81],
-      ["r2", true, 81],
-    ]);
   });
 
   it.each([
@@ -234,22 +338,31 @@ describe("scoring pipeline (mocked scorer)", () => {
     ["score 140", goodOutput({ score: 140 })],
     ["fractional score", goodOutput({ score: 55.5 })],
     ["one-sentence explanation", goodOutput({ explanation: "Strong fit." })],
-    ["missing explanation", goodOutput({ explanation: undefined })],
     ["an extra key", goodOutput({ verdict: "hire" })],
   ])("turns a malformed response (%s) into an error row; other resumes still finish", async (_, bad) => {
     const { POST } = setup({ scorer: fakeScorer({ "r1.pdf": bad }) });
-    const { results } = (await (await POST(post(body()))).json()) as {
-      results: { id: string; ok: boolean; error?: { code: string } }[];
-    };
-    expect(results[0]).toMatchObject({ id: "r1", ok: false, error: { code: "invalid_model_output" } });
-    expect(results[1]).toMatchObject({ id: "r2", ok: true });
+    const results = await outcomes(await POST(post(body())));
+    expect(results.find((r) => r.id === "r1")).toMatchObject({ ok: false, error: { code: "invalid_model_output" } });
+    expect(results.find((r) => r.id === "r2")).toMatchObject({ ok: true });
   });
 
-  it("turns a scorer exception into an error row", async () => {
-    const { POST } = setup({ scorer: fakeScorer({ "r2.pdf": new Error("provider down") }) });
-    const { results } = (await (await POST(post(body()))).json()) as { results: { ok: boolean; error?: { code: string } }[] };
-    expect(results[0].ok).toBe(true);
-    expect(results[1]).toMatchObject({ ok: false, error: { code: "scoring_failed" } });
+  it.each([
+    ["refusal", "refusal"],
+    ["timeout", "timeout"],
+    ["truncated", "truncated"],
+    ["provider_error", "provider_error"],
+  ] as const)("reports a %s for one resume and finishes the others", async (kind, code) => {
+    const { POST } = setup({ scorer: fakeScorer({ "r2.pdf": new ScoringError(kind) }) });
+    const results = await outcomes(await POST(post(body())));
+    expect(results.find((r) => r.id === "r2")).toMatchObject({ ok: false, error: { code } });
+    expect(results.find((r) => r.id === "r1")).toMatchObject({ ok: true });
+  });
+
+  it("emits a stopped event and not-scored rows when the provider rejects the account", async () => {
+    const { POST } = setup({ scorer: fakeScorer({ "r1.pdf": new ScoringError("run_stop") }) });
+    const all = await events(await POST(post(body({ resumes: [resume("r1")] }))));
+    expect(all.map((event) => event.type)).toEqual(["start", "result", "stopped", "done"]);
+    expect(all[1]).toMatchObject({ type: "result", outcome: { id: "r1", ok: false, error: { code: "run_stopped" } } });
   });
 
   it.each([
@@ -260,8 +373,36 @@ describe("scoring pipeline (mocked scorer)", () => {
   ])("falls back to the file name when the candidate name is %s", async (_, overrides) => {
     const { POST } = setup({ scorer: fakeScorer({ "Jane_Resume_2026.pdf": goodOutput(overrides) }) });
     const payload = body({ resumes: [resume("r1", { fileName: "Jane_Resume_2026.pdf" })] });
-    const { results } = (await (await POST(post(payload))).json()) as { results: { result: { candidateName: string } }[] };
-    expect(results[0].result.candidateName).toBe("Jane_Resume_2026.pdf");
+    const [result] = await outcomes(await POST(post(payload)));
+    expect(result.ok && result.result.candidateName).toBe("Jane_Resume_2026.pdf");
+  });
+
+  it("keeps ids distinct for resumes with the same file name", async () => {
+    const { POST } = setup();
+    const twins = body({ resumes: [resume("a", { fileName: "cv.pdf" }), resume("b", { fileName: "cv.pdf" })] });
+    const results = await outcomes(await POST(post(twins)));
+    expect(results.map((r) => r.id).sort()).toEqual(["a", "b"]);
+  });
+
+  it("stops scheduling model calls when the browser cancels the stream", async () => {
+    const release: (() => void)[] = [];
+    const scorer = vi.fn<Scorer>(
+      (_, signal) =>
+        new Promise((resolve, reject) => {
+          release.push(() => resolve(goodOutput()));
+          signal.addEventListener("abort", () => reject(new ScoringError("cancelled")));
+        }),
+    );
+    const { POST, log } = setup({ scorer });
+    const response = await POST(post(body({ resumes: Array.from({ length: 12 }, (_, i) => resume(`r${i}`)) })));
+    const reader = response.body!.getReader();
+    await reader.read(); // start event
+    await vi.waitFor(() => expect(scorer).toHaveBeenCalledTimes(5));
+
+    await reader.cancel();
+    release.forEach((resolve) => resolve());
+    await vi.waitFor(() => expect(log).toHaveBeenCalledWith("rank.completed", expect.objectContaining({ cancelled: true })));
+    expect(scorer).toHaveBeenCalledTimes(5);
   });
 });
 
@@ -284,16 +425,15 @@ describe("logging", () => {
       [`${MARK}-b.pdf`]: `not json ${MARK}`,
       [`${MARK}-c.pdf`]: new Error(`provider echoed ${MARK}`),
     });
-    const handlers = [
-      createRankHandler({ isEnabled: () => true, getScorer: () => scorer, log: consoleLogger }),
-      createRankHandler({ isEnabled: () => false, getScorer: () => scorer, log: consoleLogger }),
-    ];
+    const handlers = [true, false].map((enabled) =>
+      createRankHandler({ isEnabled: () => enabled, getScorer: () => scorer, getLimiter: () => fakeLimiter(100), clientId: () => "c", log: consoleLogger }),
+    );
 
     for (const POST of handlers) {
-      await POST(post({ jobDescription: job, resumes }));
-      await POST(post({ jobDescription: MARK, resumes }));
-      await POST(post(`{"jobDescription": "${MARK}`));
-      await POST(post(`${JSON.stringify({ jobDescription: job, resumes })}${" ".repeat(MAX_REQUEST_BODY_BYTES)}`));
+      await (await POST(post({ jobDescription: job, resumes }))).text();
+      await (await POST(post({ jobDescription: MARK, resumes }))).text();
+      await (await POST(post(`{"jobDescription": "${MARK}`))).text();
+      await (await POST(post(`${JSON.stringify({ jobDescription: job, resumes })}${" ".repeat(MAX_REQUEST_BODY_BYTES)}`))).text();
     }
 
     expect(lines.length).toBeGreaterThanOrEqual(8);

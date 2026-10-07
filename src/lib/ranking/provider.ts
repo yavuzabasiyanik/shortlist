@@ -1,39 +1,41 @@
+import { createAnthropicScorer } from "@/lib/ranking/anthropic-scorer";
+import { consoleLogger } from "@/lib/ranking/log";
+import { rateLimitConfigured } from "@/lib/ranking/rate-limit";
 import type { Scorer } from "@/lib/ranking/score";
 
 // Which model scores resumes is configuration, not code:
-//   SCORING_PROVIDER=anthropic|openai
-//   SCORING_MODEL=<model id>
-// No provider adapter exists yet, so getScorer() returns null and the API
-// answers "not configured". Adding one means writing an adapter below that
-// calls the provider's SDK with structured JSON output.
+//   SCORING_PROVIDER=anthropic
+//   SCORING_MODEL=claude-haiku-5-5
+//   ANTHROPIC_API_KEY=<key from a workspace with a spend limit>
+// Only an Anthropic adapter exists.
 
-export const PROVIDERS = ["anthropic", "openai"] as const;
+export const PROVIDERS = ["anthropic"] as const;
 export type Provider = (typeof PROVIDERS)[number];
 
-// Brief: temperature 0–0.2 so the same input gives near-identical scores.
-export const SCORING_TEMPERATURE = 0;
-
-export type ScoringConfig = { provider: Provider; model: string; temperature: number };
+export type ScoringConfig = { provider: Provider; model: string; apiKey: string };
 
 type Env = Record<string, string | undefined>;
 
 export function readScoringConfig(env: Env): ScoringConfig | null {
   const provider = PROVIDERS.find((name) => name === env.SCORING_PROVIDER);
   const model = env.SCORING_MODEL?.trim();
-  if (!provider || !model) return null;
-  return { provider, model, temperature: SCORING_TEMPERATURE };
+  const apiKey = env.ANTHROPIC_API_KEY?.trim();
+  if (!provider || !model || !apiKey) return null;
+  return { provider, model, apiKey };
 }
-
-// One adapter per provider, added with the paid integration.
-const adapters: Partial<Record<Provider, (config: ScoringConfig) => Scorer>> = {};
 
 export function getScorer(env: Env): Scorer | null {
   const config = readScoringConfig(env);
   if (!config) return null;
-  return adapters[config.provider]?.(config) ?? null;
+  return createAnthropicScorer({ apiKey: config.apiKey, model: config.model, log: consoleLogger });
 }
 
 // Real runs are off unless the server env says exactly "true".
 export function realRunsEnabled(env: Env): boolean {
   return env.ENABLE_REAL_RUNS === "true";
+}
+
+// What the page tells the browser: one boolean, never any configuration.
+export function liveRankingAvailable(env: Env): boolean {
+  return realRunsEnabled(env) && readScoringConfig(env) !== null && rateLimitConfigured(env);
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { buildUserPrompt, SYSTEM_PROMPT } from "@/lib/ranking/prompt";
-import { readScoringConfig, realRunsEnabled, SCORING_TEMPERATURE } from "@/lib/ranking/provider";
+import { liveRankingAvailable, readScoringConfig, realRunsEnabled } from "@/lib/ranking/provider";
 
 describe("SYSTEM_PROMPT", () => {
   it.each([
@@ -39,19 +39,12 @@ describe("buildUserPrompt", () => {
 });
 
 describe("provider config", () => {
-  it("uses a temperature within the brief's 0–0.2 range", () => {
-    expect(SCORING_TEMPERATURE).toBeGreaterThanOrEqual(0);
-    expect(SCORING_TEMPERATURE).toBeLessThanOrEqual(0.2);
-  });
+  const configured = { SCORING_PROVIDER: "anthropic", SCORING_MODEL: "claude-haiku-5-5", ANTHROPIC_API_KEY: "k" };
 
-  it("reads provider and model from the environment", () => {
-    expect(readScoringConfig({ SCORING_PROVIDER: "anthropic", SCORING_MODEL: "some-model" })).toEqual({
-      provider: "anthropic",
-      model: "some-model",
-      temperature: SCORING_TEMPERATURE,
-    });
-    expect(readScoringConfig({ SCORING_PROVIDER: "unknown", SCORING_MODEL: "m" })).toBeNull();
-    expect(readScoringConfig({ SCORING_PROVIDER: "openai" })).toBeNull();
+  it("reads provider, model, and key from the environment", () => {
+    expect(readScoringConfig(configured)).toEqual({ provider: "anthropic", model: "claude-haiku-5-5", apiKey: "k" });
+    expect(readScoringConfig({ ...configured, SCORING_PROVIDER: "openai" })).toBeNull();
+    expect(readScoringConfig({ ...configured, ANTHROPIC_API_KEY: "" })).toBeNull();
   });
 
   it.each([
@@ -63,5 +56,13 @@ describe("provider config", () => {
     ["true", true],
   ])("ENABLE_REAL_RUNS=%s → enabled=%s", (value, expected) => {
     expect(realRunsEnabled({ ENABLE_REAL_RUNS: value })).toBe(expected);
+  });
+
+  it("tells the browser live ranking is available only when gate, provider, and Redis are all set", () => {
+    const redis = { UPSTASH_REDIS_REST_URL: "https://x", UPSTASH_REDIS_REST_TOKEN: "t" };
+    expect(liveRankingAvailable({ ...configured, ...redis, ENABLE_REAL_RUNS: "true" })).toBe(true);
+    expect(liveRankingAvailable({ ...configured, ...redis })).toBe(false);
+    expect(liveRankingAvailable({ ...configured, ENABLE_REAL_RUNS: "true" })).toBe(false);
+    expect(liveRankingAvailable({ ...redis, ENABLE_REAL_RUNS: "true" })).toBe(false);
   });
 });

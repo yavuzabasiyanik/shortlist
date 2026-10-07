@@ -1,7 +1,10 @@
 import { RankForm } from "@/components/rank-form";
+import { liveRankingAvailable } from "@/lib/ranking/provider";
 import { SampleDemo } from "@/components/sample-demo";
 
 export default function Home() {
+  const liveEnabled = liveRankingAvailable(process.env);
+
   return (
     <div className="mx-auto flex w-full max-w-5xl flex-1 flex-col px-4 sm:px-6">
       <header className="flex items-center gap-2 py-6">
@@ -38,16 +41,20 @@ export default function Home() {
             <h2 id="live-heading" className="text-lg font-semibold">
               Rank your own resumes
             </h2>
-            <span className="rounded-full bg-stone-200 px-2.5 py-0.5 text-xs font-medium text-stone-700">
-              Live ranking not enabled yet
-            </span>
+            {!liveEnabled && (
+              <span className="rounded-full bg-stone-200 px-2.5 py-0.5 text-xs font-medium text-stone-700">
+                Live ranking not enabled
+              </span>
+            )}
           </div>
           <p className="mt-2 mb-6 max-w-2xl text-sm leading-relaxed text-stone-600">
-            You can paste a job description and add PDFs to check that they
-            are readable. Text is extracted in your browser and kept only in
-            this tab. Nothing is uploaded or saved.
+            Paste a job description and add PDF resumes. Text is extracted in
+            your browser; the PDF files never leave it.{" "}
+            {liveEnabled
+              ? "Clicking Rank sends only the extracted text for scoring, and nothing is saved."
+              : "On this deployment nothing is sent anywhere."}
           </p>
-          <RankForm />
+          <RankForm liveEnabled={liveEnabled} />
         </section>
       </main>
 

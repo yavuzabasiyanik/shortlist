@@ -1,10 +1,13 @@
 "use client";
 
 import { useState } from "react";
+import { ResultsTable, type TableRow } from "@/components/results-table";
 import { sampleJob, sampleResults, sampleResumes } from "@/data/sample";
 
 // Highest score first; rank is derived from position, not stored.
-const rankedResults = [...sampleResults].sort((a, b) => b.score - a.score);
+const rankedRows: TableRow[] = [...sampleResults]
+  .sort((a, b) => b.score - a.score)
+  .map((result, index) => ({ ...result, key: result.fileName, rank: index + 1 }));
 
 export function SampleDemo() {
   const [showSample, setShowSample] = useState(false);
@@ -64,65 +67,9 @@ export function SampleDemo() {
           model was called.
         </p>
 
-        {/* Desktop: table */}
-        <div className="mt-4 hidden overflow-hidden rounded-lg border border-stone-200 md:block">
-          <table className="w-full text-left text-sm">
-            <thead className="bg-stone-50 text-xs uppercase tracking-wide text-stone-500">
-              <tr>
-                <th scope="col" className="px-4 py-3 font-medium">Rank</th>
-                <th scope="col" className="px-4 py-3 font-medium">Candidate</th>
-                <th scope="col" className="px-4 py-3 font-medium">Score</th>
-                <th scope="col" className="px-4 py-3 font-medium">Strengths</th>
-                <th scope="col" className="px-4 py-3 font-medium">Gaps</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-stone-200 align-top">
-              {rankedResults.map((result, index) => (
-                <tr key={result.fileName}>
-                  <td className="px-4 py-4 font-semibold text-stone-500">
-                    {index + 1}
-                  </td>
-                  <td className="px-4 py-4 font-medium">{result.candidateName}</td>
-                  <td className="px-4 py-4">
-                    <Score value={result.score} />
-                  </td>
-                  <td className="px-4 py-4">
-                    <BulletList items={result.strengths} />
-                  </td>
-                  <td className="px-4 py-4">
-                    <BulletList items={result.gaps} />
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+        <div className="mt-4">
+          <ResultsTable rows={rankedRows} />
         </div>
-
-        {/* Mobile: one card per candidate */}
-        <ol className="mt-4 space-y-3 md:hidden">
-          {rankedResults.map((result, index) => (
-            <li
-              key={result.fileName}
-              className="rounded-lg border border-stone-200 p-4"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="font-medium">
-                  <span className="mr-2 text-stone-500">#{index + 1}</span>
-                  {result.candidateName}
-                </p>
-                <Score value={result.score} />
-              </div>
-              <h3 className="mt-3 text-xs font-medium uppercase tracking-wide text-stone-500">
-                Strengths
-              </h3>
-              <BulletList items={result.strengths} />
-              <h3 className="mt-3 text-xs font-medium uppercase tracking-wide text-stone-500">
-                Gaps
-              </h3>
-              <BulletList items={result.gaps} />
-            </li>
-          ))}
-        </ol>
 
         <button
           type="button"
@@ -133,35 +80,5 @@ export function SampleDemo() {
         </button>
       </section>
     </div>
-  );
-}
-
-function Score({ value }: { value: number }) {
-  return (
-    <div className="flex items-center gap-2">
-      <span className="w-8 font-semibold tabular-nums">
-        {value}
-        <span className="sr-only"> out of 100</span>
-      </span>
-      <div
-        className="h-1.5 w-16 rounded-full bg-stone-200"
-        role="presentation"
-      >
-        <div
-          className="h-full rounded-full bg-teal-600"
-          style={{ width: `${value}%` }}
-        />
-      </div>
-    </div>
-  );
-}
-
-function BulletList({ items }: { items: string[] }) {
-  return (
-    <ul className="mt-1 list-disc space-y-1 pl-4 text-stone-700 marker:text-stone-400">
-      {items.map((item) => (
-        <li key={item}>{item}</li>
-      ))}
-    </ul>
   );
 }

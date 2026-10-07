@@ -11,6 +11,9 @@
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
+    "@anthropic-ai/sdk": "0.127.0",
+    "@upstash/ratelimit": "2.1.0",
+    "@upstash/redis": "1.38.4",
     "next": "16.4.0",
     "pdfjs-dist": "6.3.289",
     "react": "19.3.0",
