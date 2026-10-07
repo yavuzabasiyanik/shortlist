@@ -61,6 +61,10 @@ describe("RankRequestSchema", () => {
     expect(valid(request({ resumes: [resume("i".repeat(64), { text: "x".repeat(30_000), fileName: "f".repeat(255) })] }))).toBe(true);
   });
 
+  it("rejects a client-supplied date (the server sets it)", () => {
+    expect(valid({ ...request(), today: "1999-01-01" })).toBe(false);
+  });
+
   it("rejects missing fields and wrong types", () => {
     expect(valid({ resumes: [resume("r1")] })).toBe(false);
     expect(valid(request({ resumes: "nope" }))).toBe(false);

@@ -48,13 +48,14 @@ export async function scoreResume(
   jobDescription: string,
   resume: ResumeInput,
   signal: AbortSignal,
+  today: string,
 ): Promise<ResumeOutcome> {
   const { id, fileName } = resume;
 
   let raw: string;
   try {
     raw = await scorer(
-      { system: SYSTEM_PROMPT, user: buildUserPrompt(jobDescription, fileName, resume.text) },
+      { system: SYSTEM_PROMPT, user: buildUserPrompt(jobDescription, fileName, resume.text, today) },
       signal,
     );
   } catch (error) {

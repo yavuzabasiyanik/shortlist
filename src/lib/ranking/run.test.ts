@@ -39,6 +39,15 @@ function controlledScorer() {
 const tick = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 describe("runRanking", () => {
+  it("gives every scoring call the server's current UTC date", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    vi.setSystemTime(new Date("2026-10-08T03:30:00Z")); // still Oct 7 in the Americas
+    const scorer = vi.fn<Scorer>(async () => output(50));
+    await runRanking({ request: request(2), scorer, signal: new AbortController().signal, emit: () => {} });
+    vi.useRealTimers();
+    for (const [prompt] of scorer.mock.calls) expect(prompt.user).toMatch(/^Today's date \(UTC\): 2026-10-08\n/);
+  });
+
   it("runs at most five scoring calls at once and starts the next as one finishes", async () => {
     const { scorer, calls, maxInFlight } = controlledScorer();
     const emitted: ResumeOutcome[] = [];

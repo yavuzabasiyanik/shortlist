@@ -29,6 +29,8 @@ export async function runRanking({
   concurrency?: number;
 }): Promise<RunSummary> {
   const { resumes, jobDescription } = request;
+  // One date for the whole run, from the server clock.
+  const today = new Date().toISOString().slice(0, 10);
   const run = new AbortController();
   const stopRun = () => run.abort();
   signal.addEventListener("abort", stopRun, { once: true });
@@ -50,7 +52,7 @@ export async function runRanking({
     while (!run.signal.aborted && next < resumes.length) {
       const resume = resumes[next++];
       try {
-        finish(await scoreResume(scorer, jobDescription, resume, run.signal));
+        finish(await scoreResume(scorer, jobDescription, resume, run.signal, today));
       } catch (error) {
         if (error instanceof ScoringError && error.kind === "run_stop") {
           stopped = true;
