@@ -48,7 +48,7 @@ Shortlist is a portfolio project. It is aimed at a recruiter or hiring manager a
 | Run-wide stop | HTTP 400/401/402/403/404/429 from the provider | Covers spend limits (400), the tier spend cap and rate limits (429), billing (402), and key problems. No more calls are scheduled, in-flight calls are cancelled, and the rest are reported as not scored. |
 | Cancellation | Browser cancel or disconnect aborts in-flight calls and stops scheduling | |
 
-Worst case per resume: about 13K input tokens (a 10,000-character job plus a 30,000-character resume) and 2,000 output tokens, about $0.0023. Worst case per run (20 resumes): about $0.05. Worst case per IP per day (3 runs): about $0.14. The Anthropic workspace spend limit is the hard backstop.
+Worst case per resume: about 13K input tokens (a 10,000-character job plus a 30,000-character resume) and 2,000 output tokens, about $0.0023. Worst case per run (20 resumes): about $0.05. Worst case per IP per day (3 runs): about $0.14. The hard backstop is the **$5 monthly spend limit** on the "Shortlist" Anthropic workspace that owns the API key; when it is reached the API returns 400 and the run stops.
 
 ### Rate limit policy
 
@@ -61,7 +61,7 @@ Worst case per resume: about 13K input tokens (a 10,000-character job plus a 30,
 
 ### Remaining before enabling production
 
-1. **Anthropic spending cap.** In the Claude Console, create a workspace named "Shortlist" (Settings > Workspaces). On its **Spend limits** tab, set a monthly limit (for example $10). Create an API key in that workspace.
+1. **Anthropic spending cap.** In the Claude Console, create a workspace named "Shortlist" (Settings > Workspaces). On its **Spend limits** tab, set the monthly limit to **$5** (configured). Create an API key in that workspace.
 2. **Vercel env (Preview only first).** Set `ANTHROPIC_API_KEY` (sensitive), `SCORING_PROVIDER=anthropic`, `SCORING_MODEL=claude-haiku-5-5`, and `ENABLE_REAL_RUNS=true` for the **Preview** environment.
 3. **Upstash.** Accept the Upstash terms (Vercel Marketplace), then run `vercel integration add upstash/upstash-kv --name shortlist-ratelimit --plan free`.
 4. **Protected preview verification.** Deploy a preview; Vercel Authentication protects it. Run 3 one-resume fictional runs and a 4th, and confirm the 4th is `429` with no model call in the logs.
@@ -182,7 +182,7 @@ See [.env.example](.env.example). All are server-only.
 | `ENABLE_REAL_RUNS` | unset (off) | Real runs are allowed only when this is exactly `true`. Keep it off until the spending cap and the deployed rate limit are verified. |
 | `SCORING_PROVIDER` | unset | `anthropic` (the only adapter). |
 | `SCORING_MODEL` | unset | `claude-haiku-5-5`. |
-| `ANTHROPIC_API_KEY` | unset | Key from a workspace with a spend limit. Server only. |
+| `ANTHROPIC_API_KEY` | unset | Key from the "Shortlist" workspace ($5 monthly spend limit). Server only. |
 | `KV_REST_API_URL` / `KV_REST_API_TOKEN` | unset | Set by the Upstash integration (`UPSTASH_REDIS_REST_*` also accepted). Without them live ranking refuses every run. |
 
 The page tells the browser only whether live ranking is available (one boolean, computed on the server at build time). Changing env vars requires a redeploy.
