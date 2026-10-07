@@ -10,13 +10,19 @@ Shortlist is a portfolio project. It is aimed at a recruiter or hiring manager a
 
 ## Status
 
-This is the initial skeleton (build step 1 in the brief):
+| Ticket | Scope | Status |
+| --- | --- | --- |
+| Milestone 1 | Skeleton and first deployment | Done |
+| SHORT-01 | Job description input (10,000-character limit, live count, 100-character minimum) | Done |
+| SHORT-02 | PDF upload: drag and drop or file picker, 1–20 PDFs, 5 MB each, text extracted in the browser | Done |
+| SHORT-03 | Live ranking and streaming | Not started |
+| SHORT-04 | Complete sample-data experience | Partial: precomputed sample table only |
+| SHORT-05 | CSV export | Not started |
+| SHORT-06 | Expandable explanations | Not started (explanations exist in the sample data but are hidden) |
 
-- One-page, responsive shell with the product pitch and the screening-aid notice.
-- **Try with sample data**: shows a fictional job description, five fictional resume fixtures, and a ranked table of **precomputed** results. Sample mode makes no API calls.
-- Uploads and live ranking are shown as unavailable. No ranking endpoint exists yet.
+**Rank is always disabled.** The page shows when the job description and resumes are valid, but live ranking is not enabled yet and no ranking endpoint exists.
 
-Not built yet: job description input, PDF upload and parsing, live ranking, streaming, expandable explanations, CSV export.
+**Privacy.** PDFs are read with `pdfjs-dist` in the browser. Files and extracted text stay in React state for the current tab only. They are never uploaded, saved, or logged.
 
 ### TODO
 
@@ -37,10 +43,16 @@ Not built yet: job description input, PDF upload and parsing, live ranking, stre
 
 ```
 src/app/layout.tsx              Root layout: fonts, page title, description
-src/app/page.tsx                The single page: pitch, sample demo, "not available yet" section
+src/app/page.tsx                The single page: pitch, sample demo, "rank your own resumes" form
 src/app/icon.svg                Favicon
 src/app/globals.css             Tailwind import and base colors
 src/components/sample-demo.tsx  Client component: sample button, job, ranked table
+src/components/rank-form.tsx    Job description + uploads + readiness checklist + (disabled) Rank button
+src/components/job-description-input.tsx  Text box with character count and limits
+src/components/resume-upload.tsx          Drop zone, file picker, file list with statuses and Remove
+src/lib/use-resume-files.ts     File list state, intake validation, one-at-a-time parsing queue
+src/lib/extract-pdf-text.ts     Browser-side PDF text extraction and error classification
+src/lib/limits.ts               Input limits shared with the future API
 src/data/sample.ts              Fictional job, five resume fixtures, precomputed results
 .env.example                    Documents ENABLE_REAL_RUNS (no secrets)
 ```

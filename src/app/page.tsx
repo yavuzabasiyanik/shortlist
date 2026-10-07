@@ -1,3 +1,4 @@
+import { RankForm } from "@/components/rank-form";
 import { SampleDemo } from "@/components/sample-demo";
 
 export default function Home() {
@@ -31,29 +32,22 @@ export default function Home() {
 
         <section
           aria-labelledby="live-heading"
-          className="rounded-xl border border-dashed border-stone-300 p-5 sm:p-8"
+          className="rounded-xl border border-stone-200 bg-white p-5 shadow-sm sm:p-8"
         >
           <div className="flex flex-wrap items-center gap-3">
             <h2 id="live-heading" className="text-lg font-semibold">
-              Upload your own resumes
+              Rank your own resumes
             </h2>
             <span className="rounded-full bg-stone-200 px-2.5 py-0.5 text-xs font-medium text-stone-700">
-              Not available yet
+              Live ranking not enabled yet
             </span>
           </div>
-          <p className="mt-2 max-w-2xl text-sm leading-relaxed text-stone-600">
-            This first version only shows sample data. Uploading PDFs and live
-            ranking are in progress. When they ship, text will be extracted from
-            PDFs in your browser, files will never be uploaded, and nothing will
-            be stored after the request ends.
+          <p className="mt-2 mb-6 max-w-2xl text-sm leading-relaxed text-stone-600">
+            You can paste a job description and add PDFs to check that they
+            are readable. Text is extracted in your browser and kept only in
+            this tab. Nothing is uploaded or saved.
           </p>
-          <button
-            type="button"
-            disabled
-            className="mt-4 cursor-not-allowed rounded-lg border border-stone-300 px-4 py-2 text-sm font-medium text-stone-400"
-          >
-            Rank resumes (unavailable)
-          </button>
+          <RankForm />
         </section>
       </main>
 

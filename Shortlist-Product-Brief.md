@@ -61,19 +61,42 @@ One Next.js app on Vercel, no separate backend and no database. The PO must not 
 | --- | --- | --- |
 | Front end | Next.js (App Router), React, TypeScript, Tailwind | Matches my stack; fast to ship |
 | API | Next.js route handler (Node runtime) | One deploy, no extra infra |
-| PDF parsing | `unpdf` or `pdf-parse`, server-side | Text extraction only; no OCR |
+| PDF parsing | `pdfjs-dist`, in the browser | Text extraction only; no OCR. Raw PDFs never leave the browser |
 | LLM | OpenAI or Anthropic API via an SDK with structured (JSON schema) output | Reliable, typed scores |
 | Validation | Zod schema for the LLM response | Rejects malformed output |
 | Streaming | Server streams one result per resume as it finishes | Shows real-time UI skill |
+| Rate limiting | Upstash Redis (Vercel Marketplace, free tier) with `@upstash/ratelimit` | 3 real ranking runs per IP per day. Used only for rate limiting; no resume data is stored |
 | Hosting | Vercel, API key in environment variables | Free tier, public URL |
 
 Request flow:
 
-1. Browser sends the job description and PDFs to the route handler.
-2. Server extracts text from each PDF.
+1. Browser extracts text from each PDF with `pdfjs-dist`. The PDF file itself is never uploaded.
+2. Browser sends the job description, extracted text, and file names to the route handler. The server validates the request: at most 20 resumes, at most 30,000 characters per resume, and an aggregate request-size limit.
 3. Server calls the LLM once per resume, in parallel (max 5 at a time).
 4. Each validated result streams back to the browser as soon as it is ready.
 5. Browser inserts the row and re-sorts the table. Nothing is stored after the request ends.
+
+## Approved amendments
+
+These were approved after the original brief and override it where they conflict.
+
+- **PDF parsing in the browser.** Text is extracted client-side with `pdfjs-dist`. Raw PDFs never leave the browser.
+- **API input.** The future API receives extracted text and file names, not files. It validates a maximum of 20 resumes, caps each resume at 30,000 characters, and enforces an aggregate request-size limit.
+- **Rate limiting.** Upstash Redis through the Vercel Marketplace, free tier, is permitted only for per-IP rate limiting with `@upstash/ratelimit`: three real ranking runs per IP per day. No resume data is stored in Redis.
+- **Real runs off by default.** The server-only flag `ENABLE_REAL_RUNS=false` keeps real runs disabled until the spending cap and the deployed rate limit are verified.
+- **Sample mode is free.** Sample results are bundled and precomputed, with zero model calls.
+
+## Tickets
+
+| Ticket | Scope |
+| --- | --- |
+| Milestone 1 | Skeleton and first deployment (done) |
+| SHORT-01 | Job description input (story 1) |
+| SHORT-02 | PDF upload (story 2) |
+| SHORT-03 | Live ranking and streaming (story 3) |
+| SHORT-04 | Complete sample-data experience (story 4) |
+| SHORT-05 | CSV export (story 5) |
+| SHORT-06 | Expandable explanations (story 6) |
 
 ## LLM output schema and prompt rules
 

@@ -14,13 +14,15 @@ export type SampleResume = {
   text: string;
 };
 
-// Mirrors the planned LLM output schema, minus the explanation (SHORT-06).
+// The brief's LLM output schema, plus the file it came from.
+// `explanation` is not shown yet; expandable rows arrive in SHORT-06.
 export type RankingResult = {
   fileName: string;
   candidateName: string;
   score: number;
   strengths: [string, string, string];
   gaps: [string, string];
+  explanation: string;
 };
 
 export const sampleJob: SampleJob = {
@@ -98,6 +100,8 @@ export const sampleResults: RankingResult[] = [
       "No Next.js experience listed",
       "No mentoring experience mentioned",
     ],
+    explanation:
+      "Maya meets every must-have: she has led a React and TypeScript dashboard at Tidewater Freight Software since 2021, built its route and delay charts with D3, and added Playwright and Jest tests. Her WCAG audit at Copperline Studio covers the accessibility nice-to-have. Her resume does not mention Next.js or mentoring.",
   },
   {
     fileName: "daniel-reyes.pdf",
@@ -112,6 +116,8 @@ export const sampleResults: RankingResult[] = [
       "No dashboard or data visualization work listed",
       "No end-to-end testing mentioned",
     ],
+    explanation:
+      "Daniel has used React since 2019 and TypeScript since 2020, runs Next.js in production, and owns a Jest and React Testing Library suite. Mentoring two interns matches the mentoring part of the role. His resume shows no dashboard or data visualization work, which the job lists as a must-have.",
   },
   {
     fileName: "sofia-lindqvist.pdf",
@@ -126,6 +132,8 @@ export const sampleResults: RankingResult[] = [
       "Under 4 years of React; no TypeScript listed (must-have)",
       "No automated testing mentioned (must-have)",
     ],
+    explanation:
+      "Sofia has the strongest visualization background: D3 charts for grid operators and Vue.js news graphics since 2020. Her React experience starts in 2023, TypeScript is not listed, and her resume does not mention automated tests. Missing must-haves cap her score at 60.",
   },
   {
     fileName: "grace-kim.pdf",
@@ -140,6 +148,8 @@ export const sampleResults: RankingResult[] = [
       "About 2 years of experience versus 4+ required (must-have)",
       "No dashboard or data visualization work listed",
     ],
+    explanation:
+      "Grace works in React and TypeScript at Parcelpoint, writes Vitest component tests, and added keyboard navigation and screen-reader labels to a booking flow. She has about two years of professional experience against the 4+ required, and lists no dashboard or data visualization work. Missing must-haves cap her score at 60.",
   },
   {
     fileName: "tomas-herrera.pdf",
@@ -154,5 +164,7 @@ export const sampleResults: RankingResult[] = [
       "Primarily backend; lacks 4+ years of React and TypeScript (must-have)",
       "No dashboard or data visualization work listed",
     ],
+    explanation:
+      "Tomás brings freight domain knowledge from Quarry Logistics and writes pytest suites for all his services. His work is mainly Python backend; React appears only as one internal admin page, and no dashboard or visualization work is listed. Missing the core React and TypeScript requirement caps his score at 60, and he scores well below that.",
   },
 ];
