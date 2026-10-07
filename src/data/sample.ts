@@ -3,6 +3,8 @@
 // The results are hand-written placeholders, not model output, so sample
 // mode makes zero API calls.
 
+import type { ScoreResult } from "@/lib/ranking/schema";
+
 export type SampleJob = {
   title: string;
   company: string;
@@ -14,16 +16,9 @@ export type SampleResume = {
   text: string;
 };
 
-// The brief's LLM output schema, plus the file it came from.
+// A precomputed result in the brief's schema, plus its file name.
 // `explanation` is not shown yet; expandable rows arrive in SHORT-06.
-export type RankingResult = {
-  fileName: string;
-  candidateName: string;
-  score: number;
-  strengths: [string, string, string];
-  gaps: [string, string];
-  explanation: string;
-};
+export type RankingResult = ScoreResult & { fileName: string };
 
 export const sampleJob: SampleJob = {
   title: "Senior Frontend Engineer",

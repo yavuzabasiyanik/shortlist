@@ -1,0 +1,97 @@
+import { z } from "zod";
+import {
+  JOB_DESCRIPTION_MAX_CHARS,
+  JOB_DESCRIPTION_MIN_CHARS,
+  MAX_FILE_NAME_CHARS,
+  MAX_RESUME_ID_CHARS,
+  MAX_RESUME_TEXT_CHARS,
+  MAX_RESUMES,
+} from "@/lib/limits";
+
+// ---------- Request: what the browser sends ----------
+
+const ResumeInputSchema = z.strictObject({
+  id: z
+    .string()
+    .min(1)
+    .max(MAX_RESUME_ID_CHARS)
+    .regex(/^[A-Za-z0-9_-]+$/, "Use only letters, digits, '-' and '_'."),
+  fileName: z
+    .string()
+    .min(1)
+    .max(MAX_FILE_NAME_CHARS)
+    .refine(
+      (name) => ![...name].some((char) => char < " " || char === "\x7f"),
+      "File name contains control characters.",
+    ),
+  text: z
+    .string()
+    .max(MAX_RESUME_TEXT_CHARS)
+    .refine((text) => text.trim().length > 0, "Resume text is empty."),
+});
+
+export const RankRequestSchema = z.strictObject({
+  jobDescription: z.string().min(JOB_DESCRIPTION_MIN_CHARS).max(JOB_DESCRIPTION_MAX_CHARS),
+  resumes: z
+    .array(ResumeInputSchema)
+    .min(1)
+    .max(MAX_RESUMES)
+    .superRefine((resumes, ctx) => {
+      const seen = new Set<string>();
+      resumes.forEach((resume, index) => {
+        if (seen.has(resume.id)) {
+          ctx.addIssue({ code: "custom", message: "Duplicate resume id.", path: [index, "id"] });
+        }
+        seen.add(resume.id);
+      });
+    }),
+});
+
+export type RankRequest = z.infer<typeof RankRequestSchema>;
+export type ResumeInput = RankRequest["resumes"][number];
+
+// ---------- Result: the brief's LLM output schema ----------
+
+// Counts sentence endings: ".", "!" or "?" followed by a space or the end.
+// "Node.js" doesn't count; it's a rough check, not a grammar parser.
+function sentenceCount(text: string) {
+  return text.trim().match(/[.!?]+(?=\s|$)/g)?.length ?? 0;
+}
+
+const bullet = z.string().trim().min(1).max(300);
+
+const resultFields = {
+  score: z.number().int().min(0).max(100),
+  strengths: z.array(bullet).length(3),
+  gaps: z.array(bullet).length(2),
+  explanation: z
+    .string()
+    .trim()
+    .min(1)
+    .max(1_200)
+    .refine((text) => {
+      const n = sentenceCount(text);
+      return n >= 2 && n <= 3;
+    }, "Explanation must be 2–3 sentences."),
+};
+
+// What the model must return. It may leave candidateName empty (or omit it)
+// when the resume has no name; the server then falls back to the file name.
+export const ModelOutputSchema = z.strictObject({
+  candidateName: z.string().trim().max(200).nullish(),
+  ...resultFields,
+});
+
+// A validated result as shown in the table.
+export const ScoreResultSchema = z.strictObject({
+  candidateName: z.string().trim().min(1).max(MAX_FILE_NAME_CHARS),
+  ...resultFields,
+});
+
+export type ScoreResult = z.infer<typeof ScoreResultSchema>;
+
+// One entry per resume in the API response. A failed resume doesn't stop
+// the others; it becomes an error row.
+export type ResumeOutcome =
+  | { id: string; fileName: string; ok: true; result: ScoreResult }
+  | { id: string; fileName: string; ok: false; error: { code: string; message: string } };
