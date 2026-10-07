@@ -15,12 +15,12 @@ Shortlist is a portfolio project. It is aimed at a recruiter or hiring manager a
 | Milestone 1 | Skeleton and first deployment | Done |
 | SHORT-01 | Job description input (10,000-character limit, live count, 100-character minimum) | Done |
 | SHORT-02 | PDF upload: drag and drop or file picker, 1–20 PDFs, 5 MB each, text extracted in the browser | Done |
-| SHORT-03 | Live ranking and streaming | **Code complete; not yet enabled.** Provider adapter, rate limiting, parallel scoring, streaming, and live results UI are built and tested with mocks. Paid verification on a protected preview is waiting on the spending cap and Upstash setup below. |
+| SHORT-03 | Live ranking and streaming | **Done and live in production**, verified on a protected preview and on production (see Verification). Known limits are listed below. |
 | SHORT-04 | Complete sample-data experience | Partial: precomputed sample table only |
 | SHORT-05 | CSV export | Not started |
 | SHORT-06 | Expandable explanations | Not started (explanations exist in the sample data but are hidden) |
 
-**Production has live ranking off.** `ENABLE_REAL_RUNS` is unset, so the Rank button stays disabled and `POST /api/rank` answers `503 live_ranking_disabled` before reading the request.
+**Production has live ranking on**, limited to 3 runs per network per UTC day and backed by the $5 monthly spend limit on the Anthropic workspace.
 
 **Privacy.** PDFs are read with `pdfjs-dist` in the browser; the files never leave it. When live ranking is on, clicking Rank sends only the extracted text and file names to `/api/rank`, which forwards each resume to Anthropic for scoring and keeps nothing after the request. Logs hold only counts, codes, timings, and token usage. Redis holds only a hashed IP counter per day.
 
@@ -59,13 +59,25 @@ Worst case per resume: about 13K input tokens (a 10,000-character job plus a 30,
 - Redis stores only `shortlist:rank:<env>:<sha256(ip)>:<day> → count`, which expires with the window.
 - Fails closed. Missing Redis config, a Redis error, or a 3-second timeout all mean `503`, never an unmetered run. The library's own fail-open timeout is turned off.
 
-### Remaining before enabling production
+### Verification (2026-10-07, fictional data only)
 
-1. **Anthropic spending cap.** In the Claude Console, create a workspace named "Shortlist" (Settings > Workspaces). On its **Spend limits** tab, set the monthly limit to **$5** (configured). Create an API key in that workspace.
-2. **Vercel env (Preview only first).** Set `ANTHROPIC_API_KEY` (sensitive), `SCORING_PROVIDER=anthropic`, `SCORING_MODEL=claude-haiku-5-5`, and `ENABLE_REAL_RUNS=true` for the **Preview** environment.
-3. **Upstash.** Accept the Upstash terms (Vercel Marketplace), then run `vercel integration add upstash/upstash-kv --name shortlist-ratelimit --plan free`.
-4. **Protected preview verification.** Deploy a preview; Vercel Authentication protects it. Run 3 one-resume fictional runs and a 4th, and confirm the 4th is `429` with no model call in the logs.
-5. **Then** set `ENABLE_REAL_RUNS=true`, the key, and the model for Production and redeploy.
+| Check | Where | Result |
+| --- | --- | --- |
+| 4 simultaneous one-resume runs from one IP | Protected preview, `vercel curl` | 3 streamed results, 4th got `429`; exactly 3 model calls in the logs |
+| 4-resume run: Maya ×3 (same file name, distinct ids) + a variant missing automated testing | Protected preview, real browser through a local proxy that forwards via `vercel curl` | One POST; rows appeared one at a time (6.4 s, 6.6 s, 6.9 s, 7.3 s) and re-sorted as they arrived |
+| Experience durations | same run | All three Maya results: "React work documented since 2019", "about 5 years of TypeScript (2021–present)". Scores 88, 88, 85. Variant: 55, "Automated testing … is not evidenced in the resume, and it is a must-have requirement" |
+| One-resume run | Production, real browser, no proxy | One POST, result in about 6.1 s, score 88. Sample mode made 0 API requests. No console errors |
+| Limiter namespaces | Redis | `shortlist:rank:preview:…` and `shortlist:rank:production:…` are separate keys |
+| Log content | Vercel logs | No resume, job, or company text in any log line |
+
+Cost to date: 8 model calls, 13,152 input and 5,155 output tokens, about **$0.004** (budget: $0.50 for initial testing, $5 monthly cap).
+
+### Known limits
+
+- Scores vary slightly between identical runs (85–88 above), because Claude Haiku 5.5 doesn't accept `temperature`.
+- Paid-run explanations weren't reviewed: the test capture of the stream failed, and explanations stay hidden in the UI until SHORT-06.
+- The spend limit was set and confirmed in the Anthropic Console by the owner; it isn't readable through the API and was deliberately not tested by exhausting it.
+- On production, only a one-resume run was checked in the browser; multi-row streaming and re-sorting were checked on the preview, through the proxy.
 
 ## Limits
 
