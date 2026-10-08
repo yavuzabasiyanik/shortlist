@@ -1,7 +1,9 @@
+import type { Logger } from "@/lib/ranking/log";
 import { buildUserPrompt, SYSTEM_PROMPT } from "@/lib/ranking/prompt";
 import {
   ModelOutputSchema,
   ScoreResultSchema,
+  sentenceCount,
   type ResumeInput,
   type ResumeOutcome,
 } from "@/lib/ranking/schema";
@@ -37,6 +39,27 @@ const MESSAGES: Record<Exclude<ScoringErrorKind, "run_stop" | "cancelled">, stri
   provider_error: "The AI provider returned an error for this resume.",
 };
 
+// Describes why a model response failed validation using only schema field
+// paths, rule codes, and numbers (lengths, counted sentences). Never values.
+function describeIssues(issues: { code: string; path: PropertyKey[]; keys?: string[] }[], json: unknown) {
+  const at = (path: PropertyKey[]) =>
+    path.reduce<unknown>((value, key) => (value && typeof value === "object" ? (value as Record<PropertyKey, unknown>)[key] : undefined), json);
+  return issues
+    .map((issue) => {
+      const value = at(issue.path);
+      let detail = "";
+      if (issue.code === "too_big" || issue.code === "too_small") {
+        if (Array.isArray(value) || typeof value === "string") detail = `(len=${value.length})`;
+      } else if (issue.code === "custom" && typeof value === "string") {
+        detail = `(sentences=${sentenceCount(value)})`;
+      } else if (issue.code === "unrecognized_keys") {
+        detail = `(count=${issue.keys?.length ?? 0})`;
+      }
+      return `${issue.path.map(String).join(".") || "(root)"}:${issue.code}${detail}`;
+    })
+    .join(";");
+}
+
 export function failedOutcome(resume: ResumeInput, code: string, message: string): ResumeOutcome {
   return { id: resume.id, fileName: resume.fileName, ok: false, error: { code, message } };
 }
@@ -49,6 +72,7 @@ export async function scoreResume(
   resume: ResumeInput,
   signal: AbortSignal,
   today: string,
+  log?: Logger,
 ): Promise<ResumeOutcome> {
   const { id, fileName } = resume;
 
@@ -71,11 +95,13 @@ export async function scoreResume(
   try {
     json = JSON.parse(raw);
   } catch {
+    log?.("rank.output_invalid", { stage: "json", issues: "parse_error" });
     return failedOutcome(resume, "invalid_model_output", "The scoring response was not valid JSON.");
   }
 
   const output = ModelOutputSchema.safeParse(json);
   if (!output.success) {
+    log?.("rank.output_invalid", { stage: "schema", issues: describeIssues(output.error.issues, json) });
     return failedOutcome(resume, "invalid_model_output", "The scoring response didn't match the expected format.");
   }
 

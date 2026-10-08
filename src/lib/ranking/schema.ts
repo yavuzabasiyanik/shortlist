@@ -52,10 +52,21 @@ export type ResumeInput = RankRequest["resumes"][number];
 
 // ---------- Result: the brief's LLM output schema ----------
 
+// Periods that don't end a sentence: initialisms ("B.S.", "U.S.", "e.g.")
+// and common abbreviations ("etc.", "vs.", "Jan.").
+const INITIALISMS = /\b(?:[A-Za-z]\.){2,}/g;
+const ABBREVIATIONS = /\b(?:etc|vs|approx|incl|esp|dept|govt|jr|sr|dr|mr|mrs|ms|prof|inc|ltd|corp|jan|feb|mar|apr|jun|jul|aug|sep|sept|oct|nov|dec)\./gi;
+
 // Counts sentence endings: ".", "!" or "?" followed by a space or the end.
-// "Node.js" doesn't count; it's a rough check, not a grammar parser.
-function sentenceCount(text: string) {
-  return text.trim().match(/[.!?]+(?=\s|$)/g)?.length ?? 0;
+// "Node.js" and "4.2" don't count. A rough check, not a grammar parser.
+export function sentenceCount(text: string) {
+  const trimmed = text.trim();
+  const stripped = trimmed
+    .replace(INITIALISMS, (match) => match.replace(/\./g, ""))
+    .replace(ABBREVIATIONS, (match) => match.slice(0, -1));
+  const count = stripped.match(/[.!?]+(?=\s|$)/g)?.length ?? 0;
+  // An abbreviation that ends the text still ends the last sentence.
+  return /[.!?]$/.test(trimmed) && !/[.!?]$/.test(stripped) ? count + 1 : count;
 }
 
 const bullet = z.string().trim().min(1).max(300);

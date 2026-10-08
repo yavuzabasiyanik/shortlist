@@ -120,5 +120,10 @@ function FileStatus({ file }: { file: ResumeFile }) {
   if (file.status === "error") {
     return <p className="mt-0.5 text-xs text-red-700">{file.error}</p>;
   }
-  return <p className="mt-0.5 text-xs text-stone-600">Ready</p>;
+  return (
+    <p className="mt-0.5 text-xs text-stone-600">
+      Ready
+      {file.hasImages && <span> · Has images; text inside them isn&apos;t read</span>}
+    </p>
+  );
 }

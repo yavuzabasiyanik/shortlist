@@ -1,3 +1,4 @@
+import type { Logger } from "@/lib/ranking/log";
 import type { RankRequest, ResumeOutcome } from "@/lib/ranking/schema";
 import { failedOutcome, ScoringError, scoreResume, type Scorer } from "@/lib/ranking/score";
 
@@ -20,12 +21,14 @@ export async function runRanking({
   scorer,
   signal,
   emit,
+  log,
   concurrency = MAX_CONCURRENT_SCORING,
 }: {
   request: RankRequest;
   scorer: Scorer;
   signal: AbortSignal;
   emit: (outcome: ResumeOutcome) => void;
+  log?: Logger;
   concurrency?: number;
 }): Promise<RunSummary> {
   const { resumes, jobDescription } = request;
@@ -52,7 +55,7 @@ export async function runRanking({
     while (!run.signal.aborted && next < resumes.length) {
       const resume = resumes[next++];
       try {
-        finish(await scoreResume(scorer, jobDescription, resume, run.signal, today));
+        finish(await scoreResume(scorer, jobDescription, resume, run.signal, today, log));
       } catch (error) {
         if (error instanceof ScoringError && error.kind === "run_stop") {
           stopped = true;

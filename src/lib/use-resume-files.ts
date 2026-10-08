@@ -8,7 +8,7 @@ import { MAX_RESUMES } from "@/lib/limits";
 // Files and extracted text live only in this React state (browser memory).
 export type ResumeFile = { id: number; name: string; size: number } & (
   | { status: "parsing" }
-  | { status: "ready"; text: string; pageCount: number }
+  | { status: "ready"; text: string; pageCount: number; hasImages: boolean }
   | { status: "error"; error: string }
 );
 
@@ -54,7 +54,7 @@ export function useResumeFiles() {
           if (entry.id !== id) return entry;
           const { name, size } = entry;
           return result.ok
-            ? { id, name, size, status: "ready", text: result.text, pageCount: result.pageCount }
+            ? { id, name, size, status: "ready", text: result.text, pageCount: result.pageCount, hasImages: result.hasImages }
             : { id, name, size, status: "error", error: result.error };
         }),
       );

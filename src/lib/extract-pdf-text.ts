@@ -4,7 +4,8 @@
 import { MAX_RESUME_TEXT_CHARS } from "@/lib/limits";
 
 export type ExtractResult =
-  | { ok: true; text: string; pageCount: number }
+  // hasImages: the PDF draws images. Any text inside them isn't extracted (no OCR).
+  | { ok: true; text: string; pageCount: number; hasImages: boolean }
   | { ok: false; error: string };
 
 // pdfjs touches browser-only APIs when imported, so load it on first use.
@@ -56,7 +57,7 @@ export async function extractPdfText(
         .join("");
       pages.push(pageText);
 
-      if (!hasImages && !pageText.trim()) {
+      if (!hasImages) {
         const ops = await page.getOperatorList();
         const imageOps = IMAGE_OPS.map((name) => pdfjs.OPS[name]);
         hasImages = ops.fnArray.some((fn) => imageOps.includes(fn));
@@ -83,7 +84,7 @@ export async function extractPdfText(
         error: `Extracted text is ${text.length.toLocaleString("en-US")} characters, over the ${MAX_RESUME_TEXT_CHARS.toLocaleString("en-US")}-character limit per resume.`,
       };
     }
-    return { ok: true, text, pageCount: pdf.numPages };
+    return { ok: true, text, pageCount: pdf.numPages, hasImages };
   } catch (error) {
     if (signal.aborted) return { ok: false, error: "Cancelled." };
     if (error instanceof pdfjs.PasswordException) {

@@ -115,6 +115,7 @@ export function createRankHandler({ isEnabled, getScorer, getLimiter, clientId, 
           scorer,
           signal: run.signal,
           emit: (outcome) => send({ type: "result", outcome }),
+          log,
         });
         if (summary.stopped) send({ type: "stopped", reason: "provider_rejected" });
         send({ type: "done", scored: summary.scored, failed: summary.failed });
