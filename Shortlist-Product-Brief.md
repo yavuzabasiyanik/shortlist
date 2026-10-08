@@ -124,14 +124,14 @@ Prompt rules:
 
 Ship in this order. Deploy to Vercel after step 1 and keep it deployed, so there is always a working public link.
 
-- [ ] 1. Skeleton: Next.js app, layout, deployed to Vercel
-- [ ] 2. Job description input + PDF upload with validation (stories 1–2)
-- [ ] 3. Route handler: PDF text extraction + one LLM call + Zod validation, non-streaming
-- [ ] 4. Parallel calls + streaming results into the table (story 3)
-- [ ] 5. Sample data button (story 4)
-- [ ] 6. Expandable explanation + CSV export (stories 5–6)
-- [ ] 7. Polish: empty/loading/error states, responsive layout, favicon, page title
-- [ ] 8. README: one-line pitch, screenshot or GIF, live link, stack, how to run locally
+- [x] 1. Skeleton: Next.js app, layout, deployed to Vercel
+- [x] 2. Job description input + PDF upload with validation (stories 1–2)
+- [x] 3. Route handler: PDF text extraction + one LLM call + Zod validation, non-streaming
+- [x] 4. Parallel calls + streaming results into the table (story 3)
+- [x] 5. Sample data button (story 4)
+- [x] 6. Expandable explanation + CSV export (stories 5–6)
+- [x] 7. Polish: empty/loading/error states, responsive layout, favicon, page title
+- [x] 8. README: one-line pitch, screenshot or GIF, live link, stack, how to run locally
 
 **Done means:** live public URL, sample data works with zero setup, no console errors, README complete, and I can explain every file in an interview.
 

@@ -8,6 +8,10 @@ Paste a job description, add a stack of PDF resumes, and get a ranked shortlist 
 
 Shortlist is a portfolio project. It is aimed at a recruiter or hiring manager at a small company with no applicant tracking system. See [Shortlist-Product-Brief.md](Shortlist-Product-Brief.md) for the full scope.
 
+![Sample results with one explanation expanded](docs/screenshot.png)
+
+Click **Try with sample data** for an instant, free demo. It shows a fictional job, five fictional resumes, and precomputed results, and makes no AI calls.
+
 ## Status
 
 | Ticket | Scope | Status |
@@ -16,13 +20,13 @@ Shortlist is a portfolio project. It is aimed at a recruiter or hiring manager a
 | SHORT-01 | Job description input (10,000-character limit, live count, 100-character minimum) | Done |
 | SHORT-02 | PDF upload: drag and drop or file picker, 1–20 PDFs, 5 MB each, text extracted in the browser | Done |
 | SHORT-03 | Live ranking and streaming | **Done and live in production**, verified on a protected preview and on production (see Verification). Known limits are listed below. |
-| SHORT-04 | Complete sample-data experience | Partial: precomputed sample table only |
-| SHORT-05 | CSV export | Not started |
-| SHORT-06 | Expandable explanations | Not started (explanations exist in the sample data but are hidden) |
+| SHORT-04 | Try it instantly: fictional job + 5 fictional resumes | Done. Precomputed, labeled as such, zero AI calls; uses the same table, explanations, and CSV export as live results |
+| SHORT-05 | CSV export | Done. Browser-side; same columns as the table, in rank order; failed resumes listed after with no score |
+| SHORT-06 | Expandable explanations | Done. "Why this score?" on every successful row, desktop and mobile, keyboard accessible; no extra requests |
 
 **Production has live ranking on**, limited to 3 runs per network per UTC day and backed by the $5 monthly spend limit on the Anthropic workspace.
 
-**Privacy.** PDFs are read with `pdfjs-dist` in the browser; the files never leave it. When live ranking is on, clicking Rank sends only the extracted text and file names to `/api/rank`, which forwards each resume to Anthropic for scoring and keeps nothing after the request. Logs hold only counts, codes, timings, and token usage. Redis holds only a hashed IP counter per day.
+**Privacy.** The PDF files stay in the browser: text is extracted there with `pdfjs-dist`. Clicking Rank does send resume information off the device: the extracted text and file names go to `/api/rank`, which sends each resume's text to Anthropic for scoring. Shortlist stores none of it after the request and doesn't log it. Anthropic's own data retention applies to what it receives. Logs hold only counts, codes, timings, and token usage; Redis holds only a hashed IP counter per day. Sample mode and CSV export send nothing.
 
 **Sample results** in `src/data/sample.ts` were written by hand to match the scoring rules and are labeled as precomputed. Replacing them with model output later is optional.
 
@@ -59,7 +63,7 @@ Worst case per resume: about 13K input tokens (a 10,000-character job plus a 30,
 - Redis stores only `shortlist:rank:<env>:<sha256(ip)>:<day> → count`, which expires with the window.
 - Fails closed. Missing Redis config, a Redis error, or a 3-second timeout all mean `503`, never an unmetered run. The library's own fail-open timeout is turned off.
 
-### Verification (2026-10-07, fictional data only)
+### Verification (2026-10-07 to 10-08 UTC, fictional data only)
 
 | Check | Where | Result |
 | --- | --- | --- |
@@ -68,16 +72,20 @@ Worst case per resume: about 13K input tokens (a 10,000-character job plus a 30,
 | Experience durations | same run | All three Maya results: "React work documented since 2019", "about 5 years of TypeScript (2021–present)". Scores 88, 88, 85. Variant: 55, "Automated testing … is not evidenced in the resume, and it is a must-have requirement" |
 | One-resume run | Production, real browser, no proxy | One POST, result in about 6.1 s, score 88. Sample mode made 0 API requests. No console errors |
 | Limiter namespaces | Redis | `shortlist:rank:preview:…` and `shortlist:rank:production:…` are separate keys |
+| Maya + Jordan run, stream captured in the page | Production, real browser, no proxy | Rows arrived separately (5.1 s, 5.6 s). Maya 85: "the dated Tidewater role (2021-present) supports about 5 years of React and TypeScript". Jordan 55: automated testing "is not evidenced in the resume, which caps the score at 60 or lower". Both explanations are 2 sentences citing resume specifics. CSV export matched the table; expanding and exporting made no requests |
+| Explanations, CSV edge cases, export gating, loading/partial/error states, keyboard, mobile | Mocked `/api/rank` in the browser (no server calls), local and production | 21/21 checks pass |
 | Log content | Vercel logs | No resume, job, or company text in any log line |
 
-Cost to date: 8 model calls, 13,152 input and 5,155 output tokens, about **$0.004** (budget: $0.50 for initial testing, $5 monthly cap).
+Cost to date: 10 model calls, 16,620 input and 6,544 output tokens, about **$0.005** (budget: $0.50 for initial testing, $5 monthly cap).
 
-### Known limits
+### Known limitations
 
-- Scores vary slightly between identical runs (85–88 above), because Claude Haiku 5.5 doesn't accept `temperature`.
-- Paid-run explanations weren't reviewed: the test capture of the stream failed, and explanations stay hidden in the UI until SHORT-06.
-- The spend limit was set and confirmed in the Anthropic Console by the owner; it isn't readable through the API and was deliberately not tested by exhausting it.
-- On production, only a one-resume run was checked in the browser; multi-row streaming and re-sorting were checked on the preview, through the proxy.
+- **Scores vary between identical runs.** Observed: the same fictional resume scored 85, 88, and 88 in one run, and 85 and 88 across runs. Claude Haiku 5.5 doesn't accept a `temperature` setting, but even where temperature can be set, it wouldn't guarantee identical scores. Treat differences of a few points as noise.
+- **Durations can be incomplete.** In testing, explanations stated dated experience correctly but sometimes mentioned only the most recent role (for example, Maya's React work since 2019 wasn't always mentioned).
+- **No OCR.** Scanned or image-only PDFs are rejected with an error.
+- **Demo limits.** 3 live rankings per network per UTC day. Networks that share an IP (offices, mobile carriers) share the allowance.
+- **The spend limit** was set and confirmed in the Anthropic Console by the owner. It isn't readable through the API and wasn't tested by exhausting it.
+- **Screening aid only.** The model can be wrong; every candidate needs human review.
 
 ## Limits
 
@@ -142,6 +150,7 @@ src/components/sample-demo.tsx  Client component: sample button, job, ranked tab
 src/components/results-table.tsx Ranked table (desktop) / cards (mobile), shared by sample and live results
 src/components/live-results.tsx  Progress, ranked live rows, error rows, rate-limit notice
 src/components/rank-form.tsx    Job description + uploads + checklist + Rank / Cancel
+src/components/export-button.tsx Download CSV button (sample and live)
 src/components/job-description-input.tsx  Text box with character count and limits
 src/components/resume-upload.tsx          Drop zone, file picker, file list with statuses and Remove
 src/lib/limits.ts               Every input limit, shared by browser and server
@@ -161,6 +170,7 @@ src/lib/ranking/read-body.ts    Reads the request body with a byte limit
 src/lib/ranking/handler.ts      The route logic: gate, limits, validation, rate limit, streamed scoring
 src/lib/ranking/provider.ts     ENABLE_REAL_RUNS gate, provider config, and the one boolean the page shows
 src/lib/use-live-ranking.ts     Browser: sends a run, reads the stream, cancel, one run at a time
+src/lib/csv.ts                  Builds the CSV: quoting, BOM, formula-injection guard, rank order
 src/lib/**/*.test.ts            Vitest tests
 src/data/sample.ts              Fictional job, five resume fixtures, precomputed results
 ```
@@ -211,5 +221,5 @@ vercel deploy --prod
 ## Privacy and guardrails
 
 - All sample people and companies are fictional.
-- PDF files never leave the browser. Extracted text is sent only when you click Rank, is scored, and is not stored or logged.
+- PDF files never leave the browser. Their extracted text leaves the device only when you click Rank; it is scored by Anthropic and not stored or logged by Shortlist.
 - Scores are a screening aid, not a hiring decision.
