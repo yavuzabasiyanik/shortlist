@@ -6,7 +6,7 @@ Paste a job description, add a stack of PDF resumes, and get a ranked shortlist 
 
 **Live demo:** https://shortlist-yavuz.vercel.app
 
-Shortlist is a portfolio project. It is aimed at a recruiter or hiring manager at a small company with no applicant tracking system. See [Shortlist-Product-Brief.md](Shortlist-Product-Brief.md) for the full scope.
+Shortlist is a portfolio project. It is aimed at a recruiter or hiring manager at a small company with no applicant tracking system. See [the product brief](docs/Shortlist-Product-Brief.md) for the full scope.
 
 ![The Shortlist workspace with the sample data loaded and one explanation expanded](docs/screenshot.png)
 
