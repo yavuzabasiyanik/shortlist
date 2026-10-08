@@ -1,3 +1,4 @@
+import { ExportButton } from "@/components/export-button";
 import { ResultsTable } from "@/components/results-table";
 import { rankOutcomes } from "@/lib/ranking/rank-rows";
 import type { RunState } from "@/lib/use-live-ranking";
@@ -10,6 +11,9 @@ export function LiveResults({ state }: { state: RunState }) {
   const received = new Set(outcomes.map((o) => o.id));
   const missing = state.status === "running" ? [] : submitted.filter((r) => !received.has(r.id));
   const total = submitted.length;
+  const notScored = [...failed, ...missing.map((r) => ({ ...r, message: "No result received." }))];
+  // Export only a finished set: after the run ends, is cancelled, or is cut off.
+  const exportable = state.status !== "running" && ranked.length + notScored.length > 0;
 
   return (
     <section aria-labelledby="live-results-heading" className="space-y-4 border-t border-stone-200 pt-6">
@@ -34,6 +38,9 @@ export function LiveResults({ state }: { state: RunState }) {
             {outcomes.length} of {total} {total === 1 ? "resume" : "resumes"} finished
             {failed.length ? `, ${failed.length} with errors` : ""}.
           </p>
+          {state.status === "running" && outcomes.length === 0 && (
+            <p className="mt-1 text-xs text-stone-500">Waiting for the first result. Each resume usually takes a few seconds.</p>
+          )}
           <div className="mt-2 h-1.5 w-full rounded-full bg-stone-200" role="presentation">
             <div className="h-full rounded-full bg-teal-600 transition-all" style={{ width: `${total ? (outcomes.length / total) * 100 : 0}%` }} />
           </div>
@@ -55,11 +62,11 @@ export function LiveResults({ state }: { state: RunState }) {
         <ResultsTable rows={ranked.map((row) => ({ ...row, key: row.id }))} />
       )}
 
-      {(failed.length > 0 || missing.length > 0) && (
+      {notScored.length > 0 && (
         <div>
           <h4 className="text-sm font-medium">Not scored</h4>
           <ul className="mt-2 divide-y divide-stone-200 rounded-lg border border-stone-200 bg-white text-sm">
-            {[...failed, ...missing.map((r) => ({ ...r, message: "No result received." }))].map((row) => (
+            {notScored.map((row) => (
               <li key={row.id} className="px-3 py-2.5">
                 <p className="truncate font-mono text-xs text-stone-800" title={row.fileName}>
                   {row.fileName}
@@ -68,6 +75,15 @@ export function LiveResults({ state }: { state: RunState }) {
               </li>
             ))}
           </ul>
+        </div>
+      )}
+
+      {state.status !== "failed" && (
+        <div className="flex flex-wrap items-center gap-3">
+          <ExportButton ranked={ranked} failed={notScored} fileName="shortlist-results.csv" disabled={!exportable} />
+          {!exportable && state.status === "running" && (
+            <span className="text-xs text-stone-500">Available when ranking finishes.</span>
+          )}
         </div>
       )}
 

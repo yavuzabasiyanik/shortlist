@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { ExportButton } from "@/components/export-button";
 import { ResultsTable, type TableRow } from "@/components/results-table";
 import { sampleJob, sampleResults, sampleResumes } from "@/data/sample";
 
@@ -71,13 +72,16 @@ export function SampleDemo() {
           <ResultsTable rows={rankedRows} />
         </div>
 
-        <button
-          type="button"
-          onClick={() => setShowSample(false)}
-          className="mt-4 text-sm font-medium text-teal-800 underline-offset-4 hover:underline"
-        >
-          Hide sample
-        </button>
+        <div className="mt-4 flex flex-wrap items-center gap-4">
+          <ExportButton ranked={rankedRows} fileName="shortlist-sample-precomputed.csv" />
+          <button
+            type="button"
+            onClick={() => setShowSample(false)}
+            className="text-sm font-medium text-teal-800 underline-offset-4 hover:underline"
+          >
+            Hide sample
+          </button>
+        </div>
       </section>
     </div>
   );

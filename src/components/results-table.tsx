@@ -1,5 +1,10 @@
+"use client";
+
+import { Fragment, useState } from "react";
+
 // The ranked table shared by the sample and live results: a table on wide
-// screens and one card per candidate on phones.
+// screens and one card per candidate on phones. Each row's explanation is
+// already in the result, so expanding it makes no request.
 export type TableRow = {
   key: string;
   rank: number;
@@ -7,9 +12,19 @@ export type TableRow = {
   score: number;
   strengths: string[];
   gaps: string[];
+  explanation: string;
 };
 
 export function ResultsTable({ rows }: { rows: TableRow[] }) {
+  const [open, setOpen] = useState<Set<string>>(new Set());
+  const toggle = (key: string) =>
+    setOpen((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+
   return (
     <>
       {/* Desktop: table */}
@@ -26,21 +41,38 @@ export function ResultsTable({ rows }: { rows: TableRow[] }) {
           </thead>
           <tbody className="divide-y divide-stone-200 align-top">
             {rows.map((row) => (
-              <tr key={row.key}>
-                <td className="px-4 py-4 font-semibold text-stone-500">
-                  {row.rank}
-                </td>
-                <td className="px-4 py-4 font-medium">{row.candidateName}</td>
-                <td className="px-4 py-4">
-                  <Score value={row.score} />
-                </td>
-                <td className="px-4 py-4">
-                  <BulletList items={row.strengths} />
-                </td>
-                <td className="px-4 py-4">
-                  <BulletList items={row.gaps} />
-                </td>
-              </tr>
+              <Fragment key={row.key}>
+                <tr>
+                  <td className="px-4 py-4 font-semibold text-stone-500">
+                    {row.rank}
+                  </td>
+                  <td className="px-4 py-4 font-medium">
+                    {row.candidateName}
+                    <ExplainButton
+                      expanded={open.has(row.key)}
+                      controls={`why-desktop-${row.key}`}
+                      name={row.candidateName}
+                      onClick={() => toggle(row.key)}
+                    />
+                  </td>
+                  <td className="px-4 py-4">
+                    <Score value={row.score} />
+                  </td>
+                  <td className="px-4 py-4">
+                    <BulletList items={row.strengths} />
+                  </td>
+                  <td className="px-4 py-4">
+                    <BulletList items={row.gaps} />
+                  </td>
+                </tr>
+                <tr id={`why-desktop-${row.key}`} hidden={!open.has(row.key)} className="bg-stone-50">
+                  <td />
+                  <td colSpan={4} className="px-4 pb-4 pt-0 text-sm leading-relaxed text-stone-700">
+                    <span className="font-medium text-stone-900">Why this score: </span>
+                    {row.explanation}
+                  </td>
+                </tr>
+              </Fragment>
             ))}
           </tbody>
         </table>
@@ -68,10 +100,51 @@ export function ResultsTable({ rows }: { rows: TableRow[] }) {
               Gaps
             </h3>
             <BulletList items={row.gaps} />
+            <ExplainButton
+              expanded={open.has(row.key)}
+              controls={`why-mobile-${row.key}`}
+              name={row.candidateName}
+              onClick={() => toggle(row.key)}
+            />
+            <p
+              id={`why-mobile-${row.key}`}
+              hidden={!open.has(row.key)}
+              className="mt-2 rounded-md bg-stone-50 p-3 text-sm leading-relaxed text-stone-700"
+            >
+              {row.explanation}
+            </p>
           </li>
         ))}
       </ol>
     </>
+  );
+}
+
+function ExplainButton({
+  expanded,
+  controls,
+  name,
+  onClick,
+}: {
+  expanded: boolean;
+  controls: string;
+  name: string;
+  onClick: () => void;
+}) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      aria-expanded={expanded}
+      aria-controls={controls}
+      aria-label={`${expanded ? "Hide" : "Show"} why ${name} got this score`}
+      className="mt-2 flex items-center gap-1 whitespace-nowrap rounded text-xs font-medium text-teal-800 underline-offset-4 hover:underline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+    >
+      <span aria-hidden className={`inline-block transition-transform ${expanded ? "rotate-90" : ""}`}>
+        ▸
+      </span>
+      {expanded ? "Hide explanation" : "Why this score?"}
+    </button>
   );
 }
 
