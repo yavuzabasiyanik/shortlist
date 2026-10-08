@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 import { ArrowDownIcon } from "@/components/icons";
 import { LiveInputs } from "@/components/live-inputs";
 import { ResultsPanel } from "@/components/results-panel";
+import type { InputMethod, PasteDraft } from "@/components/resume-upload";
 import { SampleInputs } from "@/components/sample-inputs";
 import { inputReadiness } from "@/lib/input-readiness";
 import { useLiveRanking } from "@/lib/use-live-ranking";
@@ -16,6 +17,8 @@ export function Workspace({ liveEnabled }: { liveEnabled: boolean }) {
   const [mode, setMode] = useState<"own" | "sample">("own");
   const [jobDescription, setJobDescription] = useState("");
   const resumes = useResumeFiles();
+  const [method, setMethod] = useState<InputMethod>("pdf");
+  const [draft, setDraft] = useState<PasteDraft>({ label: "", text: "" });
   const { state: run, start, cancel } = useLiveRanking();
   const results = useRef<HTMLElement>(null);
   // Set by an explicit "Try with sample data" click; handled after render.
@@ -64,7 +67,7 @@ export function Workspace({ liveEnabled }: { liveEnabled: boolean }) {
   const rank = () => {
     if (mode !== "own") return;
     const ready = resumes.files.flatMap((file) =>
-      file.status === "ready" ? [{ id: `f${file.id}`, fileName: file.name, text: file.text }] : [],
+      file.status === "ready" ? [{ id: `f${file.id}`, fileName: file.name, text: file.text, hasImages: file.hasImages }] : [],
     );
     void start(jobDescription, ready);
   };
@@ -120,6 +123,10 @@ export function Workspace({ liveEnabled }: { liveEnabled: boolean }) {
               onRank={rank}
               onCancel={cancel}
               onJumpToResults={() => jumpToResults()}
+              method={method}
+              onMethodChange={setMethod}
+              draft={draft}
+              onDraftChange={setDraft}
             />
           )}
         </section>

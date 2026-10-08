@@ -98,6 +98,7 @@ These were approved after the original brief and override it where they conflict
 | SHORT-04 | Complete sample-data experience (story 4) |
 | SHORT-05 | CSV export (story 5) |
 | SHORT-06 | Expandable explanations (story 6) |
+| SHORT-07 | Pasted resume text alongside PDF uploads (approved scope: one shared candidate list, max 20 combined, max 30,000 characters each, same ranking pipeline; PDFs with images get a notice and can be replaced by pasted text; no OCR) |
 
 ## LLM output schema and prompt rules
 

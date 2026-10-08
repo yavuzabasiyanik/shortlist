@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CheckIcon, ChevronIcon, MinusCircleIcon } from "@/components/icons";
+import { CheckIcon, ChevronIcon, InfoIcon, MinusCircleIcon } from "@/components/icons";
+import { IMAGES_NOTICE } from "@/lib/notices";
 
 // One ranked candidate, as shown for both sample and live results. The
 // explanation is already in the result, so expanding it makes no request.
@@ -14,10 +15,20 @@ export type CandidateRow = {
   strengths: string[];
   gaps: string[];
   explanation: string;
+  // The PDF contained images whose text wasn't scored.
+  textOnly?: boolean;
 };
 
 export function CandidateList({ rows }: { rows: CandidateRow[] }) {
   const [open, setOpen] = useState<Set<string>>(new Set());
+  const [notes, setNotes] = useState<Set<string>>(new Set());
+  const toggleNote = (key: string) =>
+    setNotes((current) => {
+      const next = new Set(current);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
   const toggle = (key: string) =>
     setOpen((current) => {
       const next = new Set(current);
@@ -59,9 +70,27 @@ export function CandidateList({ rows }: { rows: CandidateRow[] }) {
                         {row.fileName}
                       </p>
                     )}
+                    {row.textOnly && (
+                      <button
+                        type="button"
+                        onClick={() => toggleNote(row.key)}
+                        aria-expanded={notes.has(row.key)}
+                        aria-controls={`note-${row.key}`}
+                        className="mt-1 inline-flex items-center gap-1 rounded-full bg-stone-100 px-2 py-0.5 text-xs font-medium text-stone-700 ring-1 ring-stone-300 hover:bg-stone-200 focus-visible:outline-2 focus-visible:outline-offset-1 focus-visible:outline-teal-700"
+                      >
+                        <InfoIcon className="h-3 w-3" />
+                        Text-only extraction
+                      </button>
+                    )}
                   </div>
                   <MatchScore value={row.score} />
                 </header>
+
+                {row.textOnly && (
+                  <p id={`note-${row.key}`} hidden={!notes.has(row.key)} className="mt-2 rounded-lg bg-stone-50 px-3 py-2 text-xs leading-relaxed text-stone-700">
+                    {IMAGES_NOTICE}
+                  </p>
+                )}
 
                 <div className="mt-2.5 grid gap-x-5 gap-y-3 sm:grid-cols-2">
                   <Evidence title="Strengths" items={row.strengths} icon={<CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-stone-600" />} />

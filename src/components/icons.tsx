@@ -21,6 +21,9 @@ export const MinusCircleIcon = ({ className }: IconProps) => (
 export const FileIcon = ({ className }: IconProps) => (
   <svg {...base(className)}><path d="M14 3H7a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2V8z" /><path d="M14 3v5h5M9 13h6M9 17h4" /></svg>
 );
+export const TextIcon = ({ className }: IconProps) => (
+  <svg {...base(className)}><path d="M4 6h16M4 10h16M4 14h10M4 18h7" /></svg>
+);
 export const UploadIcon = ({ className }: IconProps) => (
   <svg {...base(className)}><path d="M12 15V4M7 9l5-5 5 5" /><path d="M5 15v3a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-3" /></svg>
 );

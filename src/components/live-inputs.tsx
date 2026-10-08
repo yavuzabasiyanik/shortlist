@@ -2,7 +2,7 @@
 
 import { ArrowDownIcon, LockIcon } from "@/components/icons";
 import { JobDescriptionInput } from "@/components/job-description-input";
-import { ResumeUpload } from "@/components/resume-upload";
+import { ResumeUpload, type InputMethod, type PasteDraft } from "@/components/resume-upload";
 import { inputReadiness } from "@/lib/input-readiness";
 import type { RunState } from "@/lib/use-live-ranking";
 import type { useResumeFiles } from "@/lib/use-resume-files";
@@ -16,16 +16,20 @@ type Props = {
   onRank: () => void;
   onCancel: () => void;
   onJumpToResults: () => void;
+  method: InputMethod;
+  onMethodChange: (method: InputMethod) => void;
+  draft: PasteDraft;
+  onDraftChange: (draft: PasteDraft) => void;
 };
 
-export function LiveInputs({ liveEnabled, jobDescription, onJobDescriptionChange, resumes, run, onRank, onCancel, onJumpToResults }: Props) {
-  const { files, rejections, addFiles, removeFile, dismissRejections } = resumes;
+export function LiveInputs({ liveEnabled, jobDescription, onJobDescriptionChange, resumes, run, onRank, onCancel, onJumpToResults, method, onMethodChange, draft, onDraftChange }: Props) {
+  const { files, rejections, addFiles, addText, removeFile, dismissRejections } = resumes;
   const running = run.status === "running";
 
   const { parsing, failed, resumesReady, ready } = inputReadiness(jobDescription, files);
   const canRank = ready && liveEnabled && !running;
 
-  let resumeStatus = "Add at least one PDF resume.";
+  let resumeStatus = "Add at least one PDF or pasted resume.";
   if (parsing) resumeStatus = `Reading ${parsing} ${parsing === 1 ? "PDF" : "PDFs"}…`;
   else if (failed) resumeStatus = `Remove ${failed} ${failed === 1 ? "file" : "files"} that couldn't be read.`;
   else if (files.length) resumeStatus = `${files.length} ${files.length === 1 ? "resume" : "resumes"} ready.`;
@@ -33,7 +37,18 @@ export function LiveInputs({ liveEnabled, jobDescription, onJobDescriptionChange
   return (
     <div className="space-y-6">
       <JobDescriptionInput value={jobDescription} onChange={onJobDescriptionChange} />
-      <ResumeUpload files={files} rejections={rejections} onAdd={addFiles} onRemove={removeFile} onDismissRejections={dismissRejections} />
+      <ResumeUpload
+        files={files}
+        rejections={rejections}
+        onAdd={addFiles}
+        onAddText={addText}
+        onRemove={removeFile}
+        onDismissRejections={dismissRejections}
+        method={method}
+        onMethodChange={onMethodChange}
+        draft={draft}
+        onDraftChange={onDraftChange}
+      />
 
       <div className="space-y-3 border-t border-stone-200 pt-5">
         <ul className="space-y-1 text-sm" aria-label="Ranking checklist">
@@ -74,7 +89,7 @@ export function LiveInputs({ liveEnabled, jobDescription, onJobDescriptionChange
         <p className="flex gap-2 text-xs leading-relaxed text-stone-600">
           <LockIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
-            PDFs stay in your browser. Extracted text is sent to Anthropic for scoring. Shortlist doesn&apos;t save your resumes or results.
+            PDFs stay in your browser. Extracted or pasted text is sent to Anthropic for scoring. Shortlist doesn&apos;t save your resumes or results.
           </span>
         </p>
 

@@ -3,10 +3,11 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { extractPdfText } from "@/lib/extract-pdf-text";
 import { checkResumeFile } from "@/lib/check-resume-file";
-import { MAX_RESUMES } from "@/lib/limits";
+import { MAX_FILE_NAME_CHARS, MAX_RESUME_TEXT_CHARS, MAX_RESUMES } from "@/lib/limits";
 
-// Files and extracted text live only in this React state (browser memory).
-export type ResumeFile = { id: number; name: string; size: number } & (
+// Uploaded PDFs and pasted resumes share one list (and the 20-resume limit).
+// Files and text live only in this React state (browser memory).
+export type ResumeFile = { id: number; name: string; size: number; source: "pdf" | "text" } & (
   | { status: "parsing" }
   | { status: "ready"; text: string; pageCount: number; hasImages: boolean }
   | { status: "error"; error: string }
@@ -54,8 +55,8 @@ export function useResumeFiles() {
           if (entry.id !== id) return entry;
           const { name, size } = entry;
           return result.ok
-            ? { id, name, size, status: "ready", text: result.text, pageCount: result.pageCount, hasImages: result.hasImages }
-            : { id, name, size, status: "error", error: result.error };
+            ? { id, name, size, source: "pdf", status: "ready", text: result.text, pageCount: result.pageCount, hasImages: result.hasImages }
+            : { id, name, size, source: "pdf", status: "error", error: result.error };
         }),
       );
     });
@@ -81,7 +82,7 @@ export function useResumeFiles() {
         const id = nextId.current++;
         const controller = new AbortController();
         controllers.current.set(id, controller);
-        added.push({ id, name: file.name, size: file.size, status: "parsing" });
+        added.push({ id, name: file.name, size: file.size, source: "pdf", status: "parsing" });
         parse(id, file, controller.signal);
       }
 
@@ -89,6 +90,35 @@ export function useResumeFiles() {
       if (added.length) setFiles((current) => [...current, ...added]);
     },
     [files, parse],
+  );
+
+  const pastedCount = useRef(0);
+
+  // Adds pasted resume text. Returns why it can't be added, or null.
+  const addText = useCallback(
+    (label: string, text: string): string | null => {
+      const body = text.trim();
+      if (!body) return "Paste the resume text first.";
+      if (body.length > MAX_RESUME_TEXT_CHARS) {
+        return `This text is ${body.length.toLocaleString("en-US")} characters. The limit is ${MAX_RESUME_TEXT_CHARS.toLocaleString("en-US")} per resume.`;
+      }
+      if (files.length >= MAX_RESUMES) return `The limit is ${MAX_RESUMES} resumes per ranking.`;
+      // The label is sent as the file name: no control characters, at most 255 characters.
+      const cleaned = [...label]
+        .map((char) => (char < " " || char === "\x7f" ? " " : char))
+        .join("")
+        .trim()
+        .slice(0, MAX_FILE_NAME_CHARS);
+      pastedCount.current += 1;
+      const name = cleaned || `Pasted resume ${pastedCount.current}`;
+      const id = nextId.current++;
+      setFiles((current) => [
+        ...current,
+        { id, name, size: body.length, source: "text", status: "ready", text: body, pageCount: 0, hasImages: false },
+      ]);
+      return null;
+    },
+    [files.length],
   );
 
   const removeFile = useCallback((id: number) => {
@@ -99,5 +129,5 @@ export function useResumeFiles() {
 
   const dismissRejections = useCallback(() => setRejections([]), []);
 
-  return { files, rejections, addFiles, removeFile, dismissRejections };
+  return { files, rejections, addFiles, addText, removeFile, dismissRejections };
 }

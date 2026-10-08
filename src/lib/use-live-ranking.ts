@@ -9,7 +9,7 @@ export type RunStatus = "idle" | "running" | "done" | "cancelled" | "interrupted
 export type RunState = {
   status: RunStatus;
   // The resumes sent, in upload order; results are matched by id.
-  submitted: { id: string; fileName: string }[];
+  submitted: { id: string; fileName: string; hasImages?: boolean }[];
   outcomes: ResumeOutcome[];
   providerStopped: boolean;
   runsLeftToday: number | null;
@@ -25,7 +25,8 @@ const initial: RunState = {
   error: null,
 };
 
-type Resume = { id: string; fileName: string; text: string };
+// hasImages stays in the browser (for the results notice); it isn't sent.
+type Resume = { id: string; fileName: string; text: string; hasImages?: boolean };
 
 // Sends one ranking run and reads the NDJSON stream as results arrive.
 // Extracted text goes only to /api/rank; nothing is stored or logged here.
@@ -39,7 +40,7 @@ export function useLiveRanking() {
     if (controller.current) return; // a run is already in progress
     const abort = new AbortController();
     controller.current = abort;
-    setState({ ...initial, status: "running", submitted: resumes.map(({ id, fileName }) => ({ id, fileName })) });
+    setState({ ...initial, status: "running", submitted: resumes.map(({ id, fileName, hasImages }) => ({ id, fileName, hasImages })) });
 
     const fail = (status: RunStatus, error: string | null) => setState((s) => ({ ...s, status, error }));
 
@@ -47,7 +48,7 @@ export function useLiveRanking() {
       const response = await fetch("/api/rank", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ jobDescription, resumes }),
+        body: JSON.stringify({ jobDescription, resumes: resumes.map(({ id, fileName, text }) => ({ id, fileName, text })) }),
         signal: abort.signal,
       });
 

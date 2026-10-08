@@ -23,6 +23,7 @@ Click **Try with sample data** for an instant, free demo. It shows a fictional j
 | SHORT-04 | Try it instantly: fictional job + 5 fictional resumes | Done. Precomputed, labeled as such, zero AI calls; uses the same table, explanations, and CSV export as live results |
 | SHORT-05 | CSV export | Done. Browser-side; same columns as the table, in rank order; failed resumes listed after with no score |
 | SHORT-06 | Expandable explanations | Done. "Why this score?" on every successful row, desktop and mobile, keyboard accessible; no extra requests |
+| SHORT-07 | Pasted resume text | Done. "Paste text" next to PDF upload; one shared list (20 total, 30,000 characters each); PDFs with images get a notice and a "Text-only extraction" mark on their result |
 
 **Production has live ranking on**, limited to 3 runs per network per UTC day and backed by the $5 monthly spend limit on the Anthropic workspace.
 
@@ -82,7 +83,8 @@ Cost to date: 10 model calls, 16,620 input and 6,544 output tokens, about **$0.0
 
 - **Scores vary between identical runs.** Observed: the same fictional resume scored 85, 88, and 88 in one run, and 85 and 88 across runs. Claude Haiku 5.5 doesn't accept a `temperature` setting, but even where temperature can be set, it wouldn't guarantee identical scores. Treat differences of a few points as noise.
 - **Durations can be incomplete.** In testing, explanations stated dated experience correctly but sometimes mentioned only the most recent role (for example, Maya's React work since 2019 wasn't always mentioned).
-- **No OCR.** Scanned or image-only PDFs are rejected with an error. Some PDFs mix real text with lines stored as images (for example, a skills section exported as a picture). Shortlist reads the text but not the images, and marks such files "Has images; text inside them isn't read", so the score may miss that content.
+- **No OCR.** Scanned or image-only PDFs are rejected with an error. Some PDFs mix real text with lines stored as images (for example, a skills section exported as a picture). Shortlist reads the text but not the images. Such files say "This PDF contains images. Any text inside them won't be included in scoring," and their results carry a "Text-only extraction" mark. Paste the full resume text instead when that matters.
+- **An unresolved scoring failure.** One production run (2026-10-08) rejected a model response with "The scoring response didn't match the expected format." The failing field wasn't logged at the time and the case didn't reproduce. Validation failures now log the field and rule (no content), so the next occurrence can be diagnosed.
 - **Demo limits.** 3 live rankings per network per UTC day. Networks that share an IP (offices, mobile carriers) share the allowance.
 - **The spend limit** was set and confirmed in the Anthropic Console by the owner. It isn't readable through the API and wasn't tested by exhausting it.
 - **Screening aid only.** The model can be wrong; every candidate needs human review.

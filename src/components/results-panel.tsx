@@ -48,6 +48,7 @@ function LiveResults({ run }: { run: RunState }) {
   const missing = running || status === "failed" ? [] : submitted.filter((r) => !received.has(r.id));
   const notScored = [...failed, ...missing.map((r) => ({ ...r, message: "No result received." }))];
   const total = submitted.length;
+  const imageIds = new Set(submitted.filter((r) => r.hasImages).map((r) => r.id));
   const exportable = !running && ranked.length + notScored.length > 0;
 
   const count = running
@@ -95,7 +96,9 @@ function LiveResults({ run }: { run: RunState }) {
         <Message tone="neutral">{status === "cancelled" ? "Ranking cancelled." : run.error}</Message>
       )}
 
-      {ranked.length > 0 && <CandidateList rows={ranked.map((row) => ({ ...row, key: row.id }))} />}
+      {ranked.length > 0 && (
+        <CandidateList rows={ranked.map((row) => ({ ...row, key: row.id, textOnly: imageIds.has(row.id) }))} />
+      )}
 
       {pending.length > 0 && (
         <ul className="mt-3 space-y-2" aria-label="Still scoring">
@@ -192,7 +195,7 @@ function EmptyState() {
       </span>
       <p className="mt-3 text-base font-medium text-stone-900">Your ranked candidates will appear here</p>
       <p className="mt-1 max-w-md text-sm text-stone-600">
-        Add a job description and PDF resumes, then click Rank. Each candidate gets a match score, strengths, gaps, and the reasons behind the score.
+        Add a job description and resumes (PDFs or pasted text), then click Rank. Each candidate gets a match score, strengths, gaps, and the reasons behind the score.
       </p>
     </div>
   );
