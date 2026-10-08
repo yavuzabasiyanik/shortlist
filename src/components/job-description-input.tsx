@@ -1,3 +1,4 @@
+import { StepTitle } from "@/components/step-title";
 import { JOB_DESCRIPTION_MAX_CHARS, JOB_DESCRIPTION_MIN_CHARS } from "@/lib/limits";
 
 type Props = {
@@ -18,25 +19,23 @@ export function JobDescriptionInput({ value, onChange }: Props) {
 
   return (
     <div>
-      <label htmlFor="job-description" className="text-sm font-medium">
-        Job description
-      </label>
+      <StepTitle step={1} title="Job description" htmlFor="job-description" />
       <textarea
         id="job-description"
         value={value}
         onChange={(event) => onChange(event.target.value)}
-        rows={8}
+        rows={7}
         placeholder="Paste the job description, including the must-have requirements."
         aria-describedby="job-description-hint job-description-count"
         aria-invalid={tooLong}
-        className={`mt-2 block w-full resize-y rounded-lg border bg-white px-3 py-2 text-sm leading-relaxed shadow-sm placeholder:text-stone-400 focus:outline-2 focus:outline-offset-1 focus:outline-teal-700 ${
-          tooLong ? "border-red-500" : "border-stone-300"
+        className={`mt-2.5 block w-full resize-y rounded-lg border bg-white px-3 py-2.5 text-sm leading-relaxed text-stone-900 placeholder:text-stone-500 focus:outline-2 focus:outline-offset-1 focus:outline-teal-700 ${
+          tooLong ? "border-red-600" : "border-stone-300"
         }`}
       />
       <div className="mt-1.5 flex items-start justify-between gap-4 text-xs">
         <p
           id="job-description-hint"
-          className={tooLong ? "text-red-700" : tooShort ? "text-stone-500" : "text-teal-800"}
+          className={tooLong ? "text-red-700" : tooShort ? "text-stone-600" : "text-teal-800"}
         >
           {hint}
         </p>

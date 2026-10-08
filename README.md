@@ -8,7 +8,7 @@ Paste a job description, add a stack of PDF resumes, and get a ranked shortlist 
 
 Shortlist is a portfolio project. It is aimed at a recruiter or hiring manager at a small company with no applicant tracking system. See [Shortlist-Product-Brief.md](Shortlist-Product-Brief.md) for the full scope.
 
-![Sample results with one explanation expanded](docs/screenshot.png)
+![The Shortlist workspace with the sample data loaded and one explanation expanded](docs/screenshot.png)
 
 Click **Try with sample data** for an instant, free demo. It shows a fictional job, five fictional resumes, and precomputed results, and makes no AI calls.
 
@@ -146,13 +146,16 @@ src/app/page.tsx                The single page: pitch, sample demo, "rank your 
 src/app/api/rank/route.ts       POST /api/rank: wires the handler to the real gate, provider, limiter, and logger
 src/app/icon.svg                Favicon
 src/app/globals.css             Tailwind import and base colors
-src/components/sample-demo.tsx  Client component: sample button, job, ranked table
-src/components/results-table.tsx Ranked table (desktop) / cards (mobile), shared by sample and live results
-src/components/live-results.tsx  Progress, ranked live rows, error rows, rate-limit notice
-src/components/rank-form.tsx    Job description + uploads + checklist + Rank / Cancel
-src/components/export-button.tsx Download CSV button (sample and live)
+src/components/workspace.tsx    The workspace: mode switch (your resumes / sample), inputs left, results right
+src/components/live-inputs.tsx  Your inputs: job description, resumes, checklist, Rank / Cancel, runs left
+src/components/sample-inputs.tsx Read-only sample inputs (collapsed job description, 5 fictional files)
+src/components/results-panel.tsx Ranked candidates: header, badge, CSV, AI notice, empty/live/error states
+src/components/candidate-list.tsx Candidate cards: rank, match score, strengths, gaps, "Why this score?"
 src/components/job-description-input.tsx  Text box with character count and limits
 src/components/resume-upload.tsx          Drop zone, file picker, file list with statuses and Remove
+src/components/step-title.tsx   Numbered step headings
+src/components/export-button.tsx Download CSV button (sample and live)
+src/components/icons.tsx        Small inline SVG icons
 src/lib/limits.ts               Every input limit, shared by browser and server
 src/lib/check-resume-file.ts    Type and size check for a picked or dropped file
 src/lib/use-resume-files.ts     File list state, one-at-a-time parsing queue, removal

@@ -85,6 +85,7 @@ These were approved after the original brief and override it where they conflict
 - **Rate limiting.** Upstash Redis through the Vercel Marketplace, free tier, is permitted only for per-IP rate limiting with `@upstash/ratelimit`: three real ranking runs per IP per day. No resume data is stored in Redis.
 - **Real runs off by default.** The server-only flag `ENABLE_REAL_RUNS=false` keeps real runs disabled until the spending cap and the deployed rate limit are verified.
 - **Sample mode is free.** Sample results are bundled and precomputed, with zero model calls.
+- **Results notice (approved copy and placement).** The interface shows one small, neutral sentence beside the results: "AI-generated matches. Review the evidence before making hiring decisions." It replaces the earlier highlighted banner. The README keeps the fuller explanation that scores are a screening aid, not a hiring decision.
 
 ## Tickets
 
@@ -140,4 +141,4 @@ Ship in this order. Deploy to Vercel after step 1 and keep it deployed, so there
 - **Clean-room build.** Written from scratch in my own repo. No code, prompts, or data from any previous company.
 - **No real personal data.** Sample resumes are fictional. Uploaded resumes are never stored or logged.
 - **Cost control.** Cap at 20 resumes per request; show a notice that the demo uses a rate-limited API key.
-- **Honest framing.** The UI and README say scores are a screening aid, not a hiring decision.
+- **Honest framing.** The UI says results are AI-generated and must be reviewed before any hiring decision (see the approved results notice), and the README says scores are a screening aid, not a hiring decision.

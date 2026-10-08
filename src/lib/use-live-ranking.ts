@@ -53,6 +53,7 @@ export function useLiveRanking() {
 
       if (!response.ok || !response.body) {
         const body = (await response.json().catch(() => null)) as { error?: { message?: string } } | null;
+        if (response.status === 429) setState((s) => ({ ...s, runsLeftToday: 0 }));
         fail("failed", body?.error?.message ?? `The ranking request failed (HTTP ${response.status}).`);
         return;
       }

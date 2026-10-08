@@ -1,6 +1,8 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useState } from "react";
+import { FileIcon, UploadIcon, XIcon } from "@/components/icons";
+import { StepTitle } from "@/components/step-title";
 import type { Rejection, ResumeFile } from "@/lib/use-resume-files";
 import { MAX_RESUMES } from "@/lib/limits";
 
@@ -15,22 +17,14 @@ type Props = {
 export function ResumeUpload({ files, rejections, onAdd, onRemove, onDismissRejections }: Props) {
   const [dragging, setDragging] = useState(false);
 
-  // A PDF dropped outside the drop zone would replace the page; block that.
-  useEffect(() => {
-    const block = (event: DragEvent) => event.preventDefault();
-    window.addEventListener("dragover", block);
-    window.addEventListener("drop", block);
-    return () => {
-      window.removeEventListener("dragover", block);
-      window.removeEventListener("drop", block);
-    };
-  }, []);
-
   return (
     <div>
-      <p className="text-sm font-medium" id="resumes-label">
-        Resumes
-      </p>
+      <div className="flex items-baseline justify-between gap-3">
+        <StepTitle step={2} title="Resumes" id="resumes-label" />
+        <span className="text-xs text-stone-600" aria-live="polite">
+          {files.length > 0 ? `${files.length} of ${MAX_RESUMES}` : ""}
+        </span>
+      </div>
       <label
         onDragOver={(event) => {
           event.preventDefault();
@@ -42,8 +36,8 @@ export function ResumeUpload({ files, rejections, onAdd, onRemove, onDismissReje
           setDragging(false);
           onAdd(event.dataTransfer.files);
         }}
-        className={`mt-2 flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-4 py-8 text-center transition-colors focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-teal-700 ${
-          dragging ? "border-teal-600 bg-teal-50" : "border-stone-300 bg-stone-50 hover:bg-stone-100"
+        className={`mt-2.5 flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed px-4 py-5 text-center motion-safe:transition-colors focus-within:outline-2 focus-within:outline-offset-1 focus-within:outline-teal-700 ${
+          dragging ? "border-teal-600 bg-teal-50" : "border-stone-300 bg-stone-50 hover:border-teal-600 hover:bg-teal-50/50"
         }`}
       >
         <input
@@ -51,17 +45,19 @@ export function ResumeUpload({ files, rejections, onAdd, onRemove, onDismissReje
           accept="application/pdf,.pdf"
           multiple
           aria-labelledby="resumes-label"
+          aria-describedby="resume-limits"
           className="sr-only"
           onChange={(event) => {
             if (event.target.files) onAdd(event.target.files);
             event.target.value = ""; // allow re-adding the same file after removing it
           }}
         />
-        <span className="text-sm font-medium text-stone-800">
+        <UploadIcon className="h-5 w-5 text-teal-700" />
+        <span className="mt-1.5 text-sm font-medium text-stone-800">
           Drop PDFs here or <span className="text-teal-800 underline underline-offset-4">choose files</span>
         </span>
-        <span className="mt-1 text-xs text-stone-500">
-          1–{MAX_RESUMES} PDFs, up to 5 MB each. Text is read in your browser; files are never uploaded.
+        <span id="resume-limits" className="mt-1 text-xs text-stone-600">
+          PDF only · 1–{MAX_RESUMES} files · 5 MB each
         </span>
       </label>
 
@@ -90,31 +86,28 @@ export function ResumeUpload({ files, rejections, onAdd, onRemove, onDismissReje
       )}
 
       {files.length > 0 && (
-        <>
-          <p className="mt-4 text-xs text-stone-500" aria-live="polite">
-            {files.length} of {MAX_RESUMES} resumes
-          </p>
-          <ul className="mt-2 divide-y divide-stone-200 rounded-lg border border-stone-200 bg-white">
-            {files.map((file) => (
-              <li key={file.id} className="flex items-start justify-between gap-3 px-3 py-2.5">
-                <div className="min-w-0">
-                  <p className="truncate font-mono text-xs text-stone-800" title={file.name}>
-                    {file.name}
-                  </p>
-                  <FileStatus file={file} />
-                </div>
-                <button
-                  type="button"
-                  onClick={() => onRemove(file.id)}
-                  aria-label={`Remove ${file.name}`}
-                  className="shrink-0 rounded-md px-2 py-1 text-xs font-medium text-stone-600 hover:bg-stone-100 hover:text-stone-900"
-                >
-                  Remove
-                </button>
-              </li>
-            ))}
-          </ul>
-        </>
+        <ul className="mt-3 divide-y divide-stone-200 rounded-lg border border-stone-200 bg-white">
+          {files.map((file) => (
+            <li key={file.id} className="flex items-start gap-2.5 px-3 py-2.5">
+              <FileIcon className={`mt-0.5 h-4 w-4 shrink-0 ${file.status === "error" ? "text-red-700" : "text-stone-500"}`} />
+              <div className="min-w-0 flex-1">
+                <p className="truncate text-sm text-stone-800" title={file.name}>
+                  {file.name}
+                </p>
+                <FileStatus file={file} />
+              </div>
+              <button
+                type="button"
+                onClick={() => onRemove(file.id)}
+                aria-label={`Remove ${file.name}`}
+                title="Remove"
+                className="shrink-0 rounded-md p-1 text-stone-500 hover:bg-stone-100 hover:text-stone-900 focus-visible:outline-2 focus-visible:outline-teal-700"
+              >
+                <XIcon className="h-4 w-4" />
+              </button>
+            </li>
+          ))}
+        </ul>
       )}
     </div>
   );
@@ -122,7 +115,7 @@ export function ResumeUpload({ files, rejections, onAdd, onRemove, onDismissReje
 
 function FileStatus({ file }: { file: ResumeFile }) {
   if (file.status === "parsing") {
-    return <p className="mt-0.5 text-xs text-stone-500">Reading PDF…</p>;
+    return <p className="mt-0.5 text-xs text-stone-600">Reading PDF…</p>;
   }
   if (file.status === "error") {
     return <p className="mt-0.5 text-xs text-red-700">{file.error}</p>;

@@ -10,6 +10,19 @@
 }
 
 body {
-  background: #fafaf9;
+  background: #f5f4f0; /* warm off-white */
   color: #1c1917;
+}
+
+/* New result rows fade in; skipped entirely when the user prefers reduced motion. */
+@keyframes row-in {
+  from { opacity: 0; transform: translateY(4px); }
+  to { opacity: 1; transform: none; }
+}
+.row-in {
+  animation: row-in 220ms ease-out;
+}
+@media (prefers-reduced-motion: reduce) {
+  .row-in { animation: none; }
+  * { scroll-behavior: auto !important; }
 }
