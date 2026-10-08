@@ -7,6 +7,8 @@ export type CsvRankedRow = {
   score: number;
   strengths: string[];
   gaps: string[];
+  // A PDF with images whose text wasn't scored; marked in the Candidate cell.
+  textOnly?: boolean;
 };
 export type CsvFailedRow = { fileName: string; message: string };
 
@@ -28,12 +30,20 @@ export function resultsToCsv(ranked: CsvRankedRow[], failed: CsvFailedRow[] = []
   const lines = [
     CSV_COLUMNS.join(","),
     ...sorted.map((row) =>
-      [row.rank, row.candidateName, row.score, row.strengths.join("\n"), row.gaps.join("\n")].map(csvCell).join(","),
+      [
+        row.rank,
+        row.textOnly ? `${row.candidateName} [Text-only extraction]` : row.candidateName,
+        row.score,
+        row.strengths.join("\n"),
+        row.gaps.join("\n"),
+      ]
+        .map(csvCell)
+        .join(","),
     ),
     ...failed.map((row) => [`Not scored: ${row.message}`, row.fileName, "", "", ""].map(csvCell).join(",")),
   ];
   // BOM so Excel reads UTF-8 (accents, CJK) correctly; CRLF per RFC 4180.
-  return "﻿" + lines.join("\r\n") + "\r\n";
+  return "\uFEFF" + lines.join("\r\n") + "\r\n";
 }
 
 export function downloadCsv(fileName: string, csv: string) {

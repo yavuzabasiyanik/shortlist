@@ -72,6 +72,25 @@ describe("resultsToCsv", () => {
     expect(csvCell(87)).toBe("87");
   });
 
+  it("marks flagged PDF candidates in the Candidate cell only, keeping order and the formula guard", () => {
+    const rows = parse(
+      resultsToCsv([
+        row(2, { candidateName: "Pasted Person" }),
+        row(1, { candidateName: "Image PDF Person", textOnly: true }),
+        row(3, { candidateName: "=Formula Name", textOnly: true }),
+        row(4, { candidateName: "Plain PDF Person", textOnly: false }),
+      ]),
+    );
+    expect(rows[0]).toEqual(["Rank", "Candidate", "Score", "Strengths", "Gaps"]);
+    expect(rows.slice(1).map((r) => r[1])).toEqual([
+      "Image PDF Person [Text-only extraction]",
+      "Pasted Person",
+      "'=Formula Name [Text-only extraction]",
+      "Plain PDF Person",
+    ]);
+    expect(rows.slice(1).map((r) => r[0])).toEqual(["1", "2", "3", "4"]);
+  });
+
   it("lists failed resumes after ranked ones, with no score", () => {
     const rows = parse(resultsToCsv([row(1)], [{ fileName: "broken.pdf", message: "Scoring timed out." }]));
     expect(rows[2]).toEqual(["Not scored: Scoring timed out.", "broken.pdf", "", "", ""]);

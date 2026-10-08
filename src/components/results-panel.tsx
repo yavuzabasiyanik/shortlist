@@ -49,6 +49,7 @@ function LiveResults({ run }: { run: RunState }) {
   const notScored = [...failed, ...missing.map((r) => ({ ...r, message: "No result received." }))];
   const total = submitted.length;
   const imageIds = new Set(submitted.filter((r) => r.hasImages).map((r) => r.id));
+  const rows = ranked.map((row) => ({ ...row, key: row.id, textOnly: imageIds.has(row.id) }));
   const exportable = !running && ranked.length + notScored.length > 0;
 
   const count = running
@@ -59,7 +60,7 @@ function LiveResults({ run }: { run: RunState }) {
     <Frame
       count={status === "failed" ? undefined : count}
       badge={<Badge tone="live" pulsing={running}>{running ? "Scoring" : "Live results"}</Badge>}
-      action={status === "failed" ? undefined : <ExportButton ranked={ranked} failed={notScored} fileName="shortlist-results.csv" disabled={!exportable} />}
+      action={status === "failed" ? undefined : <ExportButton ranked={rows} failed={notScored} fileName="shortlist-results.csv" disabled={!exportable} />}
     >
       {status === "failed" && <Message tone="error" role="alert">{run.error}</Message>}
       {/* Progress only while running; once finished, the header totals say it. */}
@@ -96,9 +97,7 @@ function LiveResults({ run }: { run: RunState }) {
         <Message tone="neutral">{status === "cancelled" ? "Ranking cancelled." : run.error}</Message>
       )}
 
-      {ranked.length > 0 && (
-        <CandidateList rows={ranked.map((row) => ({ ...row, key: row.id, textOnly: imageIds.has(row.id) }))} />
-      )}
+      {rows.length > 0 && <CandidateList rows={rows} />}
 
       {pending.length > 0 && (
         <ul className="mt-3 space-y-2" aria-label="Still scoring">
