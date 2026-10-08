@@ -82,7 +82,7 @@ Cost to date: 10 model calls, 16,620 input and 6,544 output tokens, about **$0.0
 
 - **Scores vary between identical runs.** Observed: the same fictional resume scored 85, 88, and 88 in one run, and 85 and 88 across runs. Claude Haiku 5.5 doesn't accept a `temperature` setting, but even where temperature can be set, it wouldn't guarantee identical scores. Treat differences of a few points as noise.
 - **Durations can be incomplete.** In testing, explanations stated dated experience correctly but sometimes mentioned only the most recent role (for example, Maya's React work since 2019 wasn't always mentioned).
-- **No OCR.** Scanned or image-only PDFs are rejected with an error.
+- **No OCR.** Scanned or image-only PDFs are rejected with an error. Some PDFs mix real text with lines stored as images (for example, a skills section exported as a picture). Shortlist reads the text but not the images, and marks such files "Has images; text inside them isn't read", so the score may miss that content.
 - **Demo limits.** 3 live rankings per network per UTC day. Networks that share an IP (offices, mobile carriers) share the allowance.
 - **The spend limit** was set and confirmed in the Anthropic Console by the owner. It isn't readable through the API and wasn't tested by exhausting it.
 - **Screening aid only.** The model can be wrong; every candidate needs human review.
