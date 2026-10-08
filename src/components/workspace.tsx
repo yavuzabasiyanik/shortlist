@@ -5,6 +5,7 @@ import { ArrowDownIcon } from "@/components/icons";
 import { LiveInputs } from "@/components/live-inputs";
 import { ResultsPanel } from "@/components/results-panel";
 import { SampleInputs } from "@/components/sample-inputs";
+import { inputReadiness } from "@/lib/input-readiness";
 import { useLiveRanking } from "@/lib/use-live-ranking";
 import { useResumeFiles } from "@/lib/use-resume-files";
 
@@ -17,6 +18,10 @@ export function Workspace({ liveEnabled }: { liveEnabled: boolean }) {
   const resumes = useResumeFiles();
   const { state: run, start, cancel } = useLiveRanking();
   const results = useRef<HTMLElement>(null);
+  // Set by an explicit "Try with sample data" click; handled after render.
+  const revealResults = useRef(false);
+  // Once your inputs can be ranked, Rank becomes the main action.
+  const rankIsPrimary = liveEnabled && inputReadiness(jobDescription, resumes.files).ready;
 
   // A PDF dropped outside the drop zone would replace the page; block that.
   useEffect(() => {
@@ -29,10 +34,32 @@ export function Workspace({ liveEnabled }: { liveEnabled: boolean }) {
     };
   }, []);
 
-  const jumpToResults = () => {
-    results.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    results.current?.focus({ preventScroll: true });
+  // Brings the results heading into view and moves focus to it.
+  // `onlyIfHidden` leaves the page alone when the heading is already on screen.
+  const jumpToResults = (onlyIfHidden = false) => {
+    const heading = document.getElementById("results-heading");
+    if (!heading) return;
+    const { top } = heading.getBoundingClientRect();
+    const visible = top >= 0 && top < window.innerHeight * 0.75;
+    if (!onlyIfHidden || !visible) {
+      const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+      results.current?.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    }
+    heading.focus({ preventScroll: true });
   };
+
+  useEffect(() => {
+    if (mode === "sample" && revealResults.current) {
+      revealResults.current = false;
+      jumpToResults(true);
+    }
+  }, [mode]);
+
+  const trySample = () => {
+    revealResults.current = true;
+    setMode("sample");
+  };
+  const showJump = mode === "sample" || run.status !== "idle";
 
   const rank = () => {
     if (mode !== "own") return;
@@ -51,25 +78,32 @@ export function Workspace({ liveEnabled }: { liveEnabled: boolean }) {
             Compare resumes against your role, with clear strengths, gaps, and reasons for every score.
           </p>
         </div>
-        {mode === "own" ? (
-          <button
-            type="button"
-            onClick={() => setMode("sample")}
-            className="shrink-0 self-start rounded-lg border border-teal-700 bg-white px-4 py-2 text-sm font-semibold text-teal-800 shadow-sm hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 sm:self-auto"
-          >
-            Try with sample data
-          </button>
-        ) : (
-          // Sample results sit below the inputs on small screens.
-          <button
-            type="button"
-            onClick={jumpToResults}
-            className="flex shrink-0 items-center gap-1.5 self-start rounded-lg border border-teal-700 bg-white px-4 py-2 text-sm font-semibold text-teal-800 lg:hidden"
-          >
-            View sample results
-            <ArrowDownIcon className="h-4 w-4" />
-          </button>
-        )}
+        <div className="flex shrink-0 flex-wrap items-center gap-2">
+          {mode === "own" && (
+            <button
+              type="button"
+              onClick={trySample}
+              className={`rounded-lg px-4 py-2 text-sm font-semibold shadow-sm focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 ${
+                rankIsPrimary
+                  ? "border border-stone-300 bg-white text-stone-800 hover:bg-stone-100"
+                  : "bg-teal-700 text-white hover:bg-teal-800"
+              }`}
+            >
+              Try with sample data
+            </button>
+          )}
+          {/* Results sit below the inputs on small screens. */}
+          {showJump && (
+            <button
+              type="button"
+              onClick={() => jumpToResults()}
+              className="flex items-center gap-1.5 rounded-lg border border-stone-300 bg-white px-4 py-2 text-sm font-semibold text-stone-800 hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700 lg:hidden"
+            >
+              {mode === "sample" ? "View sample results" : "View results"}
+              <ArrowDownIcon className="h-4 w-4" />
+            </button>
+          )}
+        </div>
       </div>
 
       <div className="mt-5 grid items-start gap-5 lg:grid-cols-[minmax(0,35fr)_minmax(0,65fr)]">
@@ -85,7 +119,7 @@ export function Workspace({ liveEnabled }: { liveEnabled: boolean }) {
               run={run}
               onRank={rank}
               onCancel={cancel}
-              onJumpToResults={jumpToResults}
+              onJumpToResults={() => jumpToResults()}
             />
           )}
         </section>
@@ -96,7 +130,7 @@ export function Workspace({ liveEnabled }: { liveEnabled: boolean }) {
           aria-labelledby="results-heading"
           className="scroll-mt-4 rounded-2xl border border-stone-200 bg-white/70 p-5 shadow-[0_1px_3px_rgba(28,25,23,0.05)] focus:outline-none sm:p-6"
         >
-          <ResultsPanel mode={mode} run={run} onTrySample={() => setMode("sample")} />
+          <ResultsPanel mode={mode} run={run} />
         </section>
       </div>
     </>

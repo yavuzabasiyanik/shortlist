@@ -52,7 +52,7 @@ export function ResumeUpload({ files, rejections, onAdd, onRemove, onDismissReje
             event.target.value = ""; // allow re-adding the same file after removing it
           }}
         />
-        <UploadIcon className="h-5 w-5 text-teal-700" />
+        <UploadIcon className="h-5 w-5 text-stone-500" />
         <span className="mt-1.5 text-sm font-medium text-stone-800">
           Drop PDFs here or <span className="text-teal-800 underline underline-offset-4">choose files</span>
         </span>
@@ -120,10 +120,5 @@ function FileStatus({ file }: { file: ResumeFile }) {
   if (file.status === "error") {
     return <p className="mt-0.5 text-xs text-red-700">{file.error}</p>;
   }
-  return (
-    <p className="mt-0.5 text-xs text-teal-800">
-      Text extracted: {file.pageCount} {file.pageCount === 1 ? "page" : "pages"},{" "}
-      {file.text.length.toLocaleString("en-US")} characters
-    </p>
-  );
+  return <p className="mt-0.5 text-xs text-stone-600">Ready</p>;
 }

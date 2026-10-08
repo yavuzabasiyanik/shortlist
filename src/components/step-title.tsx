@@ -3,7 +3,7 @@
 export function StepTitle({ step, title, htmlFor, id }: { step: number; title: string; htmlFor?: string; id?: string }) {
   const content = (
     <>
-      <span aria-hidden className="flex h-5 w-5 items-center justify-center rounded-full bg-teal-700 text-[11px] font-semibold text-white">
+      <span aria-hidden className="flex h-5 w-5 items-center justify-center rounded-full bg-stone-800 text-[11px] font-semibold text-white">
         {step}
       </span>
       <span>

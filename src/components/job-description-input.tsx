@@ -35,7 +35,7 @@ export function JobDescriptionInput({ value, onChange }: Props) {
       <div className="mt-1.5 flex items-start justify-between gap-4 text-xs">
         <p
           id="job-description-hint"
-          className={tooLong ? "text-red-700" : tooShort ? "text-stone-600" : "text-teal-800"}
+          className={tooLong ? "text-red-700" : "text-stone-600"}
         >
           {hint}
         </p>

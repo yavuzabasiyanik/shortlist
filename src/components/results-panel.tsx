@@ -7,14 +7,15 @@ import { sampleResults } from "@/data/sample";
 import { rankOutcomes } from "@/lib/ranking/rank-rows";
 import type { RunState } from "@/lib/use-live-ranking";
 
-// Sample rows: highest score first; rank comes from position.
+// Sample rows: highest score first; rank comes from position. File names are
+// left off the cards because the sample input list already shows them.
 const sampleRows: CandidateRow[] = [...sampleResults]
   .sort((a, b) => b.score - a.score)
-  .map((result, index) => ({ ...result, key: result.fileName, rank: index + 1 }));
+  .map(({ fileName, ...result }, index) => ({ ...result, key: fileName, rank: index + 1 }));
 
-type Props = { mode: "own" | "sample"; run: RunState; onTrySample: () => void };
+type Props = { mode: "own" | "sample"; run: RunState };
 
-export function ResultsPanel({ mode, run, onTrySample }: Props) {
+export function ResultsPanel({ mode, run }: Props) {
   if (mode === "sample") {
     return (
       <Frame
@@ -29,7 +30,7 @@ export function ResultsPanel({ mode, run, onTrySample }: Props) {
   if (run.status === "idle") {
     return (
       <Frame>
-        <EmptyState onTrySample={onTrySample} />
+        <EmptyState />
       </Frame>
     );
   }
@@ -59,9 +60,16 @@ function LiveResults({ run }: { run: RunState }) {
       badge={<Badge tone="live" pulsing={running}>{running ? "Scoring" : "Live results"}</Badge>}
       action={status === "failed" ? undefined : <ExportButton ranked={ranked} failed={notScored} fileName="shortlist-results.csv" disabled={!exportable} />}
     >
-      {status === "failed" ? (
-        <Message tone="error" role="alert">{run.error}</Message>
-      ) : (
+      {status === "failed" && <Message tone="error" role="alert">{run.error}</Message>}
+      {/* Progress only while running; once finished, the header totals say it. */}
+      <p className="sr-only" aria-live="polite">
+        {running
+          ? `${outcomes.length} of ${total} ${total === 1 ? "resume" : "resumes"} finished${failed.length ? `, ${failed.length} with errors` : ""}.`
+          : status === "failed"
+            ? ""
+            : `Ranking finished: ${count}.`}
+      </p>
+      {running && (
         <div className="mb-4">
           <div className="h-1.5 w-full overflow-hidden rounded-full bg-stone-200" role="presentation">
             <div
@@ -69,12 +77,12 @@ function LiveResults({ run }: { run: RunState }) {
               style={{ width: `${total ? (outcomes.length / total) * 100 : 0}%` }}
             />
           </div>
-          <p className="mt-2 text-sm text-stone-700" aria-live="polite">
+          <p className="mt-2 text-sm text-stone-700" aria-hidden>
             {outcomes.length} of {total} {total === 1 ? "resume" : "resumes"} finished
             {failed.length ? `, ${failed.length} with errors` : ""}.
-            {running && outcomes.length === 0 && " Each resume usually takes a few seconds."}
+            {outcomes.length === 0 && " Each resume usually takes a few seconds."}
           </p>
-          {running && !exportable && <p className="mt-1 text-xs text-stone-600">CSV export is available when ranking finishes.</p>}
+          <p className="mt-1 text-xs text-stone-600" aria-hidden>CSV export is available when ranking finishes.</p>
         </div>
       )}
 
@@ -125,13 +133,20 @@ function LiveResults({ run }: { run: RunState }) {
 function Frame({ count, badge, action, children }: { count?: string; badge?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <>
-      <div className="flex flex-wrap items-center gap-x-3 gap-y-2">
-        <h2 id="results-heading" className="text-lg font-semibold text-stone-900">
-          Ranked candidates
-        </h2>
-        {count && <span className="text-sm text-stone-600">{count}</span>}
-        {badge}
-        {action && <div className="ml-auto">{action}</div>}
+      {/* Row 1: heading and totals. Row 2 (or right side on wider screens): status and CSV. */}
+      <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between sm:gap-4">
+        <div className="flex min-w-0 flex-wrap items-baseline gap-x-3">
+          <h2 id="results-heading" tabIndex={-1} className="text-lg font-semibold text-stone-900 focus:outline-none">
+            Ranked candidates
+          </h2>
+          {count && <span className="text-sm text-stone-600">{count}</span>}
+        </div>
+        {(badge || action) && (
+          <div className="flex items-center justify-between gap-3 sm:justify-end">
+            {badge}
+            {action}
+          </div>
+        )}
       </div>
       <p className="mt-1.5 mb-4 flex items-center gap-1.5 text-xs text-stone-600">
         <InfoIcon className="h-3.5 w-3.5 shrink-0" />
@@ -145,8 +160,8 @@ function Frame({ count, badge, action, children }: { count?: string; badge?: Rea
 function Badge({ tone, pulsing = false, children }: { tone: "sample" | "live"; pulsing?: boolean; children: React.ReactNode }) {
   return (
     <span
-      className={`inline-flex items-center gap-1.5 rounded-full px-2.5 py-0.5 text-xs font-medium ${
-        tone === "sample" ? "bg-stone-100 text-stone-800 ring-1 ring-stone-300" : "bg-teal-50 text-teal-900 ring-1 ring-teal-200"
+      className={`inline-flex shrink-0 items-center gap-1.5 whitespace-nowrap rounded-full px-2.5 py-0.5 text-xs font-medium ${
+        "bg-stone-100 text-stone-800 ring-1 ring-stone-300"
       }`}
     >
       {tone === "live" && <span aria-hidden className={`h-1.5 w-1.5 rounded-full bg-teal-600 ${pulsing ? "motion-safe:animate-pulse" : ""}`} />}
@@ -169,23 +184,16 @@ function Message({ tone, role, children }: { tone: "error" | "warning" | "neutra
   );
 }
 
-function EmptyState({ onTrySample }: { onTrySample: () => void }) {
+function EmptyState() {
   return (
-    <div className="flex flex-col items-center rounded-xl border border-dashed border-stone-300 bg-stone-50/70 px-6 py-12 text-center">
-      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-teal-50 text-teal-700">
+    <div className="flex flex-col items-center rounded-xl border border-dashed border-stone-300 bg-stone-50/70 px-6 py-10 text-center">
+      <span className="flex h-10 w-10 items-center justify-center rounded-full bg-stone-100 text-stone-600">
         <FileIcon className="h-5 w-5" />
       </span>
       <p className="mt-3 text-base font-medium text-stone-900">Your ranked candidates will appear here</p>
       <p className="mt-1 max-w-md text-sm text-stone-600">
         Add a job description and PDF resumes, then click Rank. Each candidate gets a match score, strengths, gaps, and the reasons behind the score.
       </p>
-      <button
-        type="button"
-        onClick={onTrySample}
-        className="mt-5 rounded-lg border border-teal-700 bg-white px-4 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
-      >
-        Try with sample data
-      </button>
     </div>
   );
 }

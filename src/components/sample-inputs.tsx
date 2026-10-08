@@ -11,8 +11,8 @@ export function SampleInputs({ onUseOwn }: { onUseOwn: () => void }) {
 
   return (
     <div className="space-y-6">
-      <p className="flex gap-2 rounded-lg bg-teal-50 px-3 py-2.5 text-sm text-teal-950">
-        <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-teal-800" />
+      <p className="flex gap-2 rounded-lg bg-stone-100 px-3 py-2.5 text-sm text-stone-800">
+        <InfoIcon className="mt-0.5 h-4 w-4 shrink-0 text-stone-600" />
         <span>A fictional example. Results were prepared in advance, so nothing is uploaded and no AI model is called.</span>
       </p>
 

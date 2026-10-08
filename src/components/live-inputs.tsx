@@ -3,7 +3,7 @@
 import { ArrowDownIcon, LockIcon } from "@/components/icons";
 import { JobDescriptionInput } from "@/components/job-description-input";
 import { ResumeUpload } from "@/components/resume-upload";
-import { JOB_DESCRIPTION_MAX_CHARS, JOB_DESCRIPTION_MIN_CHARS, MAX_RESUMES } from "@/lib/limits";
+import { inputReadiness } from "@/lib/input-readiness";
 import type { RunState } from "@/lib/use-live-ranking";
 import type { useResumeFiles } from "@/lib/use-resume-files";
 
@@ -22,11 +22,8 @@ export function LiveInputs({ liveEnabled, jobDescription, onJobDescriptionChange
   const { files, rejections, addFiles, removeFile, dismissRejections } = resumes;
   const running = run.status === "running";
 
-  const jobReady = jobDescription.length >= JOB_DESCRIPTION_MIN_CHARS && jobDescription.length <= JOB_DESCRIPTION_MAX_CHARS;
-  const parsing = files.filter((file) => file.status === "parsing").length;
-  const failed = files.filter((file) => file.status === "error").length;
-  const resumesReady = files.length >= 1 && files.length <= MAX_RESUMES && parsing === 0 && failed === 0;
-  const canRank = jobReady && resumesReady && liveEnabled && !running;
+  const { parsing, failed, resumesReady, ready } = inputReadiness(jobDescription, files);
+  const canRank = ready && liveEnabled && !running;
 
   let resumeStatus = "Add at least one PDF resume.";
   if (parsing) resumeStatus = `Reading ${parsing} ${parsing === 1 ? "PDF" : "PDFs"}…`;
@@ -40,9 +37,6 @@ export function LiveInputs({ liveEnabled, jobDescription, onJobDescriptionChange
 
       <div className="space-y-3 border-t border-stone-200 pt-5">
         <ul className="space-y-1 text-sm" aria-label="Ranking checklist">
-          <ChecklistItem done={jobReady}>
-            Job description: {jobReady ? "ready." : `${JOB_DESCRIPTION_MIN_CHARS}–${JOB_DESCRIPTION_MAX_CHARS.toLocaleString("en-US")} characters needed.`}
-          </ChecklistItem>
           <ChecklistItem done={resumesReady}>Resumes: {resumeStatus}</ChecklistItem>
         </ul>
 
@@ -80,7 +74,7 @@ export function LiveInputs({ liveEnabled, jobDescription, onJobDescriptionChange
         <p className="flex gap-2 text-xs leading-relaxed text-stone-600">
           <LockIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
-            PDFs stay in your browser. When you rank, the extracted text is sent for AI scoring and isn&apos;t stored.
+            PDFs stay in your browser. Extracted text is sent to Anthropic for scoring. Shortlist doesn&apos;t save your resumes or results.
           </span>
         </p>
 
@@ -105,7 +99,7 @@ function ChecklistItem({ done, children }: { done: boolean; children: React.Reac
       <span
         aria-hidden
         className={`mt-0.5 flex h-4 w-4 shrink-0 items-center justify-center rounded-full text-[10px] font-bold ${
-          done ? "bg-teal-700 text-white" : "border border-stone-400 text-transparent"
+          done ? "bg-stone-700 text-white" : "border border-stone-400 text-transparent"
         }`}
       >
         ✓
