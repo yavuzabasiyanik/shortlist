@@ -4,7 +4,7 @@ Paste a job description, add a stack of PDF resumes, and get a ranked shortlist 
 
 > Scores are a screening aid, not a hiring decision. A person should review every candidate.
 
-**Live demo:** https://shortlist-ten-sigma.vercel.app
+**Live demo:** https://shortlist-yavuz.vercel.app
 
 Shortlist is a portfolio project. It is aimed at a recruiter or hiring manager at a small company with no applicant tracking system. See [Shortlist-Product-Brief.md](Shortlist-Product-Brief.md) for the full scope.
 
