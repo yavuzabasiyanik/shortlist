@@ -6,6 +6,7 @@ import { scoreResume, type Scorer } from "@/lib/ranking/score";
 const output = (explanation: string, overrides: object = {}) => ({
   candidateName: "Jordan Example",
   score: 48,
+  reason: "Strong projects, but no professional experience is evidenced.",
   strengths: ["React and Node.js projects", "Cut load times from 4.2 to 1.8 seconds", "Teaching assistant since 2025"],
   gaps: ["4+ years of React is not evidenced in the resume", "Data visualization is not evidenced in the resume"],
   explanation,

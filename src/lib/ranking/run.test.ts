@@ -7,6 +7,7 @@ const output = (score: number) =>
   JSON.stringify({
     candidateName: "",
     score,
+    reason: "r",
     strengths: ["a", "b", "c"],
     gaps: ["d", "e"],
     explanation: "One sentence. Two sentences.",
@@ -65,7 +66,36 @@ describe("runRanking", () => {
     }
     const summary = await run;
     expect(maxInFlight()).toBe(5);
-    expect(summary).toEqual({ scored: 12, failed: 0, stopped: false, cancelled: false });
+    expect(summary).toEqual({ scored: 12, failed: 0, stopped: false, cancelled: false, timedOut: false });
+  });
+
+  it("scores a 50-resume run with one failure and keeps the other 49", async () => {
+    const scorer = vi.fn<Scorer>(async ({ user }) => {
+      if (user.includes("<file_name>r17.pdf")) throw new ScoringError("timeout");
+      return output(50);
+    });
+    const emitted: ResumeOutcome[] = [];
+    const summary = await runRanking({ request: request(50), scorer, signal: new AbortController().signal, emit: (o) => emitted.push(o) });
+    expect(scorer).toHaveBeenCalledTimes(50);
+    expect(summary).toMatchObject({ scored: 49, failed: 1, stopped: false, timedOut: false });
+    expect(emitted.find((o) => o.id === "r17")).toMatchObject({ ok: false, error: { code: "timeout" } });
+  });
+
+  it("starts no new calls after the deadline, lets started ones finish, and reports the rest", async () => {
+    vi.useFakeTimers({ toFake: ["Date"] });
+    const { scorer, calls } = controlledScorer();
+    const emitted: ResumeOutcome[] = [];
+    const run = runRanking({ request: request(8), scorer, signal: new AbortController().signal, emit: (o) => emitted.push(o), deadlineMs: 1_000 });
+    await tick();
+    expect(scorer).toHaveBeenCalledTimes(5);
+    vi.setSystemTime(Date.now() + 1_001);
+    calls.forEach((c) => c.resolve(output(70)));
+    const summary = await run;
+    vi.useRealTimers();
+    expect(scorer).toHaveBeenCalledTimes(5);
+    expect(summary).toEqual({ scored: 5, failed: 3, stopped: false, cancelled: false, timedOut: true });
+    expect(emitted.filter((o) => !o.ok).map((o) => o.id)).toEqual(["r5", "r6", "r7"]);
+    expect(emitted.find((o) => o.id === "r5")).toMatchObject({ error: { code: "time_limit" } });
   });
 
   it("emits each result as soon as it finishes, in finishing order", async () => {

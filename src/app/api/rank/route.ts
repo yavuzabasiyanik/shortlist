@@ -8,6 +8,11 @@ import { clientIdentifier, createRateLimiter } from "@/lib/ranking/rate-limit";
 // reach scoring from outside.
 // Runs on Node.js: Cache Components requires it, and Next.js rejects an
 // explicit `runtime` export when Cache Components is on.
+
+// Up to 50 resumes, 5 at a time: about a minute typically. runRanking stops
+// starting calls at 240 s so the stream finishes inside this limit.
+export const maxDuration = 300;
+
 export const POST = createRankHandler({
   isEnabled: () => realRunsEnabled(process.env),
   getScorer: () => getScorer(process.env),

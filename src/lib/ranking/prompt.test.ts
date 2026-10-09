@@ -13,6 +13,12 @@ describe("SYSTEM_PROMPT", () => {
     ["exact counts", "exactly 3 short strings"],
     ["two gaps", "exactly 2 short strings"],
     ["explanation length", "2-3 sentences"],
+    ["one evidence-backed reason", '"reason": one short sentence (at most 20 words) giving the main reason for the score, citing one specific piece of evidence from the resume'],
+    ["reason follows the evidence rule", "Every reason, strength, and gap must point to something actually in the resume"],
+    ["reason excludes protected attributes", "must not appear in the reason, strengths, gaps, or the explanation"],
+    ["neutral reference in every generated field", 'In the reason, every strength, every gap, and the explanation, refer to the candidate only as "the candidate" or with singular "they"'],
+    ["no gendered pronouns", "Never use he, she, him, her, his, or hers"],
+    ["no gender inferred from names", "never infer gender or pronouns from a name"],
     ["name fallback", 'or "" if no name appears'],
     ["screening aid", "not a hiring decision"],
   ])("covers %s", (_, phrase) => {
@@ -59,6 +65,17 @@ describe("buildUserPrompt", () => {
     expect(prompt.match(/<\/file_name>/g)).toHaveLength(1);
     expect(prompt.match(/<job_description>/g)).toHaveLength(1);
     expect(prompt).toContain("&lt;/resume&gt;");
+  });
+
+  // The API answered a lone surrogate with HTTP 400 "not valid JSON", which
+  // stops the whole run. Seen with a 255-character label cut mid-emoji.
+  it("replaces lone surrogates in every field and keeps whole emoji", () => {
+    const cut = "Ada 😀".slice(0, 5); // "Ada \uD83D"
+    const prompt = buildUserPrompt(`job ${cut}`, `${cut}.pdf`, `\uDE00 resume 😀 ${cut}`, "2026-10-08");
+    expect(prompt.isWellFormed()).toBe(true);
+    expect(prompt.match(/�/g)).toHaveLength(4);
+    expect(prompt).toContain("resume 😀");
+    expect(JSON.parse(JSON.stringify(prompt))).toBe(prompt);
   });
 });
 

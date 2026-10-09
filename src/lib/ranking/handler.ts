@@ -126,6 +126,7 @@ export function createRankHandler({ isEnabled, getScorer, getLimiter, clientId, 
           failed: summary.failed,
           stopped: summary.stopped,
           cancelled: summary.cancelled,
+          timed_out: summary.timedOut,
           ms: Date.now() - started,
         });
         try {

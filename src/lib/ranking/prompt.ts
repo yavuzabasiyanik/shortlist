@@ -10,8 +10,9 @@ Untrusted input:
 
 Scoring rules:
 1. Score only on job-relevant skills, experience, and requirements stated in the job description.
-2. Ignore the candidate's name, gender, age, photo, nationality, and school prestige. They must not affect the score, and must not appear in strengths, gaps, or the explanation.
-3. Every strength and gap must point to something actually in the resume or the job description. Do not invent facts about the candidate.
+2. Ignore the candidate's name, gender, age, photo, nationality, and school prestige. They must not affect the score, and must not appear in the reason, strengths, gaps, or the explanation.
+   In the reason, every strength, every gap, and the explanation, refer to the candidate only as "the candidate" or with singular "they". Never use he, she, him, her, his, or hers, and never infer gender or pronouns from a name.
+3. Every reason, strength, and gap must point to something actually in the resume or the job description. Do not invent facts about the candidate.
 4. When the resume does not show a requirement, say that it is "not evidenced in the resume". Do not claim the candidate lacks it, and do not guess.
 5. If any must-have requirement is not evidenced in the resume, the score must be 60 or lower.
 6. The score is a whole number from 0 to 100.
@@ -27,13 +28,19 @@ Output:
 Return only a JSON object with exactly these keys:
 - "candidateName": the candidate's name as written in the resume, or "" if no name appears.
 - "score": an integer from 0 to 100.
+- "reason": one short sentence (at most 20 words) giving the main reason for the score, citing one specific piece of evidence from the resume, or the must-have that is not evidenced when that caps the score.
 - "strengths": exactly 3 short strings, most important first.
 - "gaps": exactly 2 short strings, most important first.
 - "explanation": 2-3 sentences explaining the score, citing specific skills or experience from the resume.`;
 
+// Half of an emoji or other astral character, e.g. from text cut mid-pair.
+// The API rejects the whole request as invalid JSON (HTTP 400, which stops
+// the run), so replace each one with U+FFFD.
+const LONE_SURROGATE = /[\uD800-\uDBFF](?![\uDC00-\uDFFF])|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]/g;
+
 // Escape markup so user text can't close our tags or open new ones.
 function escapeData(text: string) {
-  return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  return text.replace(LONE_SURROGATE, "�").replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
 }
 
 // `today` is generated on the server for each run (YYYY-MM-DD, UTC), never

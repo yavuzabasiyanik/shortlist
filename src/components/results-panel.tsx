@@ -4,6 +4,7 @@ import { CandidateList, type CandidateRow } from "@/components/candidate-list";
 import { ExportButton } from "@/components/export-button";
 import { AlertIcon, FileIcon, InfoIcon, SpinnerIcon } from "@/components/icons";
 import { sampleResults } from "@/data/sample";
+import { resultsToCsv, topCandidatesToCsv, TOP_COUNT, type CsvFailedRow } from "@/lib/csv";
 import { rankOutcomes } from "@/lib/ranking/rank-rows";
 import type { RunState } from "@/lib/use-live-ranking";
 
@@ -21,7 +22,7 @@ export function ResultsPanel({ mode, run }: Props) {
       <Frame
         count={`${sampleRows.length} candidates`}
         badge={<Badge tone="sample">Sample data · Precomputed</Badge>}
-        action={<ExportButton ranked={sampleRows} fileName="shortlist-sample-precomputed.csv" />}
+        action={<Exports ranked={sampleRows} fileName="shortlist-sample-precomputed" />}
       >
         <CandidateList rows={sampleRows} />
       </Frame>
@@ -60,7 +61,7 @@ function LiveResults({ run }: { run: RunState }) {
     <Frame
       count={status === "failed" ? undefined : count}
       badge={<Badge tone="live" pulsing={running}>{running ? "Scoring" : "Live results"}</Badge>}
-      action={status === "failed" ? undefined : <ExportButton ranked={rows} failed={notScored} fileName="shortlist-results.csv" disabled={!exportable} />}
+      action={status === "failed" ? undefined : <Exports ranked={rows} failed={notScored} fileName="shortlist-results" disabled={!exportable} />}
     >
       {status === "failed" && <Message tone="error" role="alert">{run.error}</Message>}
       {/* Progress only while running; once finished, the header totals say it. */}
@@ -132,6 +133,23 @@ function LiveResults({ run }: { run: RunState }) {
   );
 }
 
+// "Top 10" lists only scored candidates, so it needs at least one. The full
+// CSV also lists resumes that weren't scored.
+function Exports({ ranked, failed = [], fileName, disabled = false }: { ranked: CandidateRow[]; failed?: CsvFailedRow[]; fileName: string; disabled?: boolean }) {
+  return (
+    <div className="flex shrink-0 gap-2">
+      <ExportButton
+        build={() => topCandidatesToCsv(ranked)}
+        fileName={`${fileName}-top-${TOP_COUNT}.csv`}
+        label={`Export top ${TOP_COUNT}`}
+        shortLabel={`Top ${TOP_COUNT}`}
+        disabled={disabled || ranked.length === 0}
+      />
+      <ExportButton build={() => resultsToCsv(ranked, failed)} fileName={`${fileName}.csv`} label="Download CSV" shortLabel="CSV" disabled={disabled} />
+    </div>
+  );
+}
+
 function Frame({ count, badge, action, children }: { count?: string; badge?: React.ReactNode; action?: React.ReactNode; children: React.ReactNode }) {
   return (
     <>
@@ -144,7 +162,7 @@ function Frame({ count, badge, action, children }: { count?: string; badge?: Rea
           {count && <span className="text-sm text-stone-600">{count}</span>}
         </div>
         {(badge || action) && (
-          <div className="flex items-center justify-between gap-3 sm:justify-end">
+          <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-2 sm:justify-end">
             {badge}
             {action}
           </div>
@@ -194,7 +212,7 @@ function EmptyState() {
       </span>
       <p className="mt-3 text-base font-medium text-stone-900">Your ranked candidates will appear here</p>
       <p className="mt-1 max-w-md text-sm text-stone-600">
-        Add a job description and resumes (PDFs or pasted text), then click Rank. Each candidate gets a match score, strengths, gaps, and the reasons behind the score.
+        Add a job description and resumes (PDF or Word files, or pasted text), then click Rank. Each candidate gets a match score, strengths, gaps, and the reasons behind the score.
       </p>
     </div>
   );

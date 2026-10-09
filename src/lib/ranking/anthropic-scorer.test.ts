@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { createAnthropicScorer, MAX_OUTPUT_TOKENS } from "@/lib/ranking/anthropic-scorer";
+import { COUNT_TIMEOUT_MS, createAnthropicScorer, MAX_INPUT_TOKENS, MAX_OUTPUT_TOKENS } from "@/lib/ranking/anthropic-scorer";
 import type { Logger } from "@/lib/ranking/log";
 
 // The SDK runs against a fake fetch: no network, no API key, no cost.
@@ -22,12 +22,20 @@ const message = (overrides: object = {}) =>
 const apiError = (status: number, type: string, msg: string, extra: object = {}) =>
   json(status, { type: "error", error: { type, message: msg, ...extra } });
 
-function setup(respond: (init: RequestInit) => Response | Promise<Response>, timeoutMs?: number) {
+// `fetch` sees only scoring calls (POST /v1/messages); `count` sees the
+// token count that precedes each one (POST /v1/messages/count_tokens).
+function setup(
+  respond: (init: RequestInit) => Response | Promise<Response>,
+  timeoutMs?: number,
+  countRespond: (init: RequestInit) => Response | Promise<Response> = () => json(200, { input_tokens: 1200 }),
+) {
   const fetch = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => respond(init ?? {}));
+  const count = vi.fn(async (_url: string | URL | Request, init?: RequestInit) => countRespond(init ?? {}));
+  const route = (url: string | URL | Request, init?: RequestInit) => (String(url).includes("/count_tokens") ? count(url, init) : fetch(url, init));
   const log = vi.fn<Logger>();
-  const scorer = createAnthropicScorer({ apiKey: "test-key", model: "claude-haiku-5-5", log, fetch: fetch as typeof globalThis.fetch, timeoutMs });
+  const scorer = createAnthropicScorer({ apiKey: "test-key", model: "claude-haiku-5-5", log, fetch: route as typeof globalThis.fetch, timeoutMs });
   const call = (signal = new AbortController().signal) => scorer({ system: "system", user: "user" }, signal);
-  return { fetch, log, call };
+  return { fetch, count, log, call };
 }
 
 describe("createAnthropicScorer", () => {
@@ -43,7 +51,7 @@ describe("createAnthropicScorer", () => {
       messages: [{ role: "user", content: "user" }],
       output_config: { effort: "low", format: { type: "json_schema" } },
     });
-    expect(sent.output_config.format.schema.required).toEqual(["candidateName", "score", "strengths", "gaps", "explanation"]);
+    expect(sent.output_config.format.schema.required).toEqual(["candidateName", "score", "reason", "strengths", "gaps", "explanation"]);
     expect(sent).not.toHaveProperty("temperature");
     expect(sent).not.toHaveProperty("top_p");
   });
@@ -72,6 +80,58 @@ describe("createAnthropicScorer", () => {
     const { fetch, call } = setup(() => apiError(status, type, msg, extra));
     await expect(call()).rejects.toMatchObject({ kind: "run_stop" });
     expect(fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("counts the exact request first and sends it only when within the input-token limit", async () => {
+    const { fetch, count, call } = setup(() => message());
+    await call();
+    expect(count).toHaveBeenCalledTimes(1);
+    const counted = JSON.parse(String(count.mock.calls[0][1]?.body));
+    const sent = JSON.parse(String(fetch.mock.calls[0][1]?.body));
+    expect(counted).toEqual({ model: sent.model, system: sent.system, messages: sent.messages, output_config: sent.output_config });
+  });
+
+  it.each([
+    [MAX_INPUT_TOKENS, 1],
+    [MAX_INPUT_TOKENS + 1, 0],
+  ])("with %i counted input tokens, makes %i scoring calls", async (tokens, calls) => {
+    const { fetch, log, call } = setup(() => message(), undefined, () => json(200, { input_tokens: tokens }));
+    if (calls) await call();
+    else {
+      await expect(call()).rejects.toMatchObject({ kind: "too_long" });
+      expect(log).toHaveBeenCalledWith("rank.input_too_long", expect.objectContaining({ input_tokens: tokens }));
+    }
+    expect(fetch).toHaveBeenCalledTimes(calls);
+  });
+
+  it("bounds the worst case per call at $0.006 (under 100K tokens: $0.10 in, $0.50 out per MTok)", () => {
+    expect(MAX_INPUT_TOKENS).toBeLessThan(100_000);
+    expect((MAX_INPUT_TOKENS * 0.1 + MAX_OUTPUT_TOKENS * 0.5) / 1e6).toBeCloseTo(0.006, 6);
+    expect(COUNT_TIMEOUT_MS).toBe(10_000);
+  });
+
+  it.each([
+    [401, "authentication_error", "run_stop"],
+    [429, "rate_limit_error", "run_stop"],
+    [500, "api_error", "provider_error"],
+  ])("treats a %i from the token count like one from scoring, and never scores", async (status, type, kind) => {
+    const { fetch, count, call } = setup(() => message(), undefined, () => apiError(status, type, "x"));
+    await expect(call()).rejects.toMatchObject({ kind });
+    expect(count).toHaveBeenCalledTimes(1);
+    expect(fetch).not.toHaveBeenCalled();
+  });
+
+  // A per-minute rate limit sends retry-after. There is no retry, so the
+  // header is never ignored and no time is spent waiting inside the run's
+  // deadline; the run stops and the rest are reported as not scored.
+  it("stops the run on a rate-limit 429 with retry-after, without waiting or retrying", async () => {
+    const { fetch, call } = setup(() =>
+      json(429, { type: "error", error: { type: "rate_limit_error", message: "Rate limited." } }, { "retry-after": "30" }),
+    );
+    const started = Date.now();
+    await expect(call()).rejects.toMatchObject({ kind: "run_stop" });
+    expect(fetch).toHaveBeenCalledTimes(1);
+    expect(Date.now() - started).toBeLessThan(1_000);
   });
 
   it.each([500, 529])("fails only this resume on HTTP %i, with no retries", async (status) => {

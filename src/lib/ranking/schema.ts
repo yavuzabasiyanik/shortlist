@@ -73,6 +73,8 @@ const bullet = z.string().trim().min(1).max(300);
 
 const resultFields = {
   score: z.number().int().min(0).max(100),
+  // One short line shown beside the candidate and in the top-10 export.
+  reason: bullet,
   strengths: z.array(bullet).length(3),
   gaps: z.array(bullet).length(2),
   explanation: z

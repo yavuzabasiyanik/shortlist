@@ -6,7 +6,7 @@ const ok = (id: string, score: number): ResumeOutcome => ({
   id,
   fileName: "cv.pdf",
   ok: true,
-  result: { candidateName: id, score, strengths: ["a", "b", "c"], gaps: ["d", "e"], explanation: "One. Two." },
+  result: { candidateName: id, score, reason: "r", strengths: ["a", "b", "c"], gaps: ["d", "e"], explanation: "One. Two." },
 });
 const bad = (id: string): ResumeOutcome => ({ id, fileName: "cv.pdf", ok: false, error: { code: "timeout", message: "Scoring timed out." } });
 

@@ -26,7 +26,7 @@ export function Workspace({ liveEnabled }: { liveEnabled: boolean }) {
   // Once your inputs can be ranked, Rank becomes the main action.
   const rankIsPrimary = liveEnabled && inputReadiness(jobDescription, resumes.files).ready;
 
-  // A PDF dropped outside the drop zone would replace the page; block that.
+  // A file dropped outside the drop zone would replace the page; block that.
   useEffect(() => {
     const block = (event: DragEvent) => event.preventDefault();
     window.addEventListener("dragover", block);

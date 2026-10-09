@@ -1,5 +1,6 @@
-// Builds the results CSV in the browser. Same columns as the table, in rank
-// order; failed resumes follow with no score.
+// Builds the results CSVs in the browser. The full export has the table's
+// columns in rank order, with failed resumes after it and no score. The
+// top-10 export lists only scored candidates, with their one-line reason.
 
 export type CsvRankedRow = {
   rank: number;
@@ -7,12 +8,15 @@ export type CsvRankedRow = {
   score: number;
   strengths: string[];
   gaps: string[];
-  // A PDF with images whose text wasn't scored; marked in the Candidate cell.
+  // A PDF or DOCX with images whose text wasn't scored; marked in the Candidate cell.
   textOnly?: boolean;
 };
 export type CsvFailedRow = { fileName: string; message: string };
+export type CsvTopRow = Pick<CsvRankedRow, "rank" | "candidateName" | "score" | "textOnly"> & { reason: string };
 
 export const CSV_COLUMNS = ["Rank", "Candidate", "Score", "Strengths", "Gaps"] as const;
+export const TOP_CSV_COLUMNS = ["Rank", "Candidate", "Score", "Reason"] as const;
+export const TOP_COUNT = 10;
 
 // A cell starting with one of these can run as a formula in Excel, Sheets,
 // or LibreOffice. Prefixing an apostrophe makes it plain text.
@@ -25,14 +29,21 @@ export function csvCell(value: string | number): string {
   return /[",\r\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
+const candidateCell = (row: { candidateName: string; textOnly?: boolean }) =>
+  row.textOnly ? `${row.candidateName} [Text-only extraction]` : row.candidateName;
+
+const byRank = <T extends { rank: number }>(rows: T[]) => [...rows].sort((a, b) => a.rank - b.rank);
+
+// BOM so Excel reads UTF-8 (accents, CJK) correctly; CRLF per RFC 4180.
+const toFile = (lines: string[]) => "\uFEFF" + lines.join("\r\n") + "\r\n";
+
 export function resultsToCsv(ranked: CsvRankedRow[], failed: CsvFailedRow[] = []): string {
-  const sorted = [...ranked].sort((a, b) => a.rank - b.rank);
   const lines = [
     CSV_COLUMNS.join(","),
-    ...sorted.map((row) =>
+    ...byRank(ranked).map((row) =>
       [
         row.rank,
-        row.textOnly ? `${row.candidateName} [Text-only extraction]` : row.candidateName,
+        candidateCell(row),
         row.score,
         row.strengths.join("\n"),
         row.gaps.join("\n"),
@@ -42,8 +53,18 @@ export function resultsToCsv(ranked: CsvRankedRow[], failed: CsvFailedRow[] = []
     ),
     ...failed.map((row) => [`Not scored: ${row.message}`, row.fileName, "", "", ""].map(csvCell).join(",")),
   ];
-  // BOM so Excel reads UTF-8 (accents, CJK) correctly; CRLF per RFC 4180.
-  return "\uFEFF" + lines.join("\r\n") + "\r\n";
+  return toFile(lines);
+}
+
+// The best `count` scored candidates in rank order, or all of them if fewer
+// were scored. Failed resumes have no rank, so they never appear here.
+export function topCandidatesToCsv(ranked: CsvTopRow[], count = TOP_COUNT): string {
+  return toFile([
+    TOP_CSV_COLUMNS.join(","),
+    ...byRank(ranked)
+      .slice(0, count)
+      .map((row) => [row.rank, candidateCell(row), row.score, row.reason].map(csvCell).join(",")),
+  ]);
 }
 
 export function downloadCsv(fileName: string, csv: string) {

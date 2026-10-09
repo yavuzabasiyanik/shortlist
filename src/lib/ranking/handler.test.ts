@@ -14,6 +14,7 @@ const goodOutput = (overrides: object = {}) =>
   JSON.stringify({
     candidateName: "Ada Example",
     score: 81,
+    reason: "React since 2019 and Playwright tests meet the must-haves.",
     strengths: ["React since 2019", "TypeScript in production", "Writes Playwright tests"],
     gaps: ["Next.js is not evidenced in the resume", "Mentoring is not evidenced in the resume"],
     explanation: "Ada meets the React and TypeScript requirements. Next.js is not evidenced in the resume.",
@@ -162,7 +163,7 @@ describe("environment gate", () => {
 describe("request validation", () => {
   it.each([
     ["no resumes", body({ resumes: [] })],
-    ["21 resumes", body({ resumes: Array.from({ length: 21 }, (_, i) => resume(`r${i}`)) })],
+    ["51 resumes", body({ resumes: Array.from({ length: 51 }, (_, i) => resume(`r${i}`)) })],
     ["duplicate ids", body({ resumes: [resume("same"), resume("same")] })],
     ["a 99-character job description", body({ jobDescription: "a".repeat(99) })],
     ["a 10,001-character job description", body({ jobDescription: "a".repeat(10_001) })],
@@ -227,19 +228,33 @@ describe(`request body limit (${MAX_REQUEST_BODY_BYTES.toLocaleString("en-US")} 
     expect(pulls()).toBe(Math.floor(MAX_REQUEST_BODY_BYTES / chunkSize) + 1);
   });
 
-  it("fits the largest valid input, even with 3-byte UTF-8 characters everywhere", async () => {
-    const wide = "界";
-    const largest = {
-      jobDescription: wide.repeat(10_000),
-      resumes: Array.from({ length: 20 }, (_, i) => ({
-        id: `r${i}`.padEnd(64, "x"),
-        fileName: `${wide.repeat(251)}${i}.pdf`.slice(0, 255),
-        text: wide.repeat(30_000),
-      })),
-    };
-    expect(Buffer.byteLength(JSON.stringify(largest))).toBeLessThan(MAX_REQUEST_BODY_BYTES);
+  // 50 resumes at the 30,000-character limit fit when the text is ASCII or
+  // 2-byte UTF-8 (accented Latin, Cyrillic, Greek, Arabic, Hebrew). Only
+  // 3-byte text (e.g. CJK) at full length can exceed the limit; the browser
+  // measures the body and says so before sending.
+  const largest = (char: string) => ({
+    jobDescription: char.repeat(10_000),
+    resumes: Array.from({ length: 50 }, (_, i) => ({
+      id: `r${i}`.padEnd(64, "x"),
+      fileName: `${char.repeat(251)}${i}.pdf`.slice(0, 255),
+      text: char.repeat(30_000),
+    })),
+  });
+
+  it.each([
+    ["ASCII", "a"],
+    ["2-byte UTF-8", "é"],
+  ])("fits 50 maximum-length resumes in %s", async (_, char) => {
+    const body = largest(char);
+    expect(Buffer.byteLength(JSON.stringify(body))).toBeLessThan(MAX_REQUEST_BODY_BYTES);
     const { POST } = setup();
-    expect(await outcomes(await POST(post(largest)))).toHaveLength(20);
+    expect(await outcomes(await POST(post(body)))).toHaveLength(50);
+  });
+
+  it("stays under Vercel's 4.5 MB request limit, and rejects full-length 3-byte text with 413", async () => {
+    expect(MAX_REQUEST_BODY_BYTES).toBeLessThan(4.5 * 1024 * 1024);
+    const { POST } = setup();
+    expect((await POST(post(largest("界")))).status).toBe(413);
   });
 });
 

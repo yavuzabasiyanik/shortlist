@@ -24,8 +24,8 @@ describe("RankRequestSchema", () => {
   it.each([
     [0, false],
     [1, true],
-    [20, true],
-    [21, false],
+    [50, true],
+    [51, false],
   ])("%i resumes → valid=%s", (count, expected) => {
     const resumes = Array.from({ length: count }, (_, i) => resume(`r${i}`));
     expect(valid(request({ resumes }))).toBe(expected);
@@ -76,6 +76,7 @@ describe("result schemas", () => {
   const output = {
     candidateName: "Ada",
     score: 80,
+    reason: "Meets the must-haves.",
     strengths: ["a", "b", "c"],
     gaps: ["d", "e"],
     explanation: "First sentence. Second sentence.",
@@ -98,6 +99,9 @@ describe("result schemas", () => {
     ["one-sentence explanation", { explanation: "Only one sentence." }],
     ["four-sentence explanation", { explanation: "One. Two. Three. Four." }],
     ["missing explanation", { explanation: undefined }],
+    ["missing reason", { reason: undefined }],
+    ["an empty reason", { reason: "  " }],
+    ["a reason over 300 characters", { reason: "a".repeat(301) }],
     ["an extra key", { notes: "x" }],
   ])("rejects %s", (_, overrides) => {
     expect(ModelOutputSchema.safeParse({ ...output, ...overrides }).success).toBe(false);
@@ -107,6 +111,18 @@ describe("result schemas", () => {
     for (const { fileName, ...result } of sampleResults) {
       expect(fileName).toMatch(/\.pdf$/);
       expect(ScoreResultSchema.safeParse(result).success).toBe(true);
+    }
+  });
+
+  // The sample stands in for model output, so it follows the same rule:
+  // "the candidate" or singular "they", never a gendered pronoun or the name.
+  it("bundled sample results use neutral references in every generated field", () => {
+    for (const { candidateName, reason, strengths, gaps, explanation } of sampleResults) {
+      const firstName = candidateName.split(" ")[0];
+      for (const field of [reason, ...strengths, ...gaps, explanation]) {
+        expect(field).not.toMatch(/\b(he|she|him|her|his|hers|himself|herself)\b/i);
+        expect(field).not.toContain(firstName);
+      }
     }
   });
 });

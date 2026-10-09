@@ -1,13 +1,14 @@
 "use client";
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { extractPdfText } from "@/lib/extract-pdf-text";
-import { checkResumeFile } from "@/lib/check-resume-file";
+import { extractDocxText } from "@/lib/extract-docx-text";
+import { extractPdfText, type ExtractResult } from "@/lib/extract-pdf-text";
+import { checkResumeFile, resumeFileKind, type ResumeFileKind } from "@/lib/check-resume-file";
 import { MAX_FILE_NAME_CHARS, MAX_RESUME_TEXT_CHARS, MAX_RESUMES } from "@/lib/limits";
 
-// Uploaded PDFs and pasted resumes share one list (and the 20-resume limit).
-// Files and text live only in this React state (browser memory).
-export type ResumeFile = { id: number; name: string; size: number; source: "pdf" | "text" } & (
+// Uploaded files (PDF, DOCX) and pasted resumes share one list (and the
+// 50-resume limit). Files and text live only in this React state (browser memory).
+export type ResumeFile = { id: number; name: string; size: number; source: ResumeFileKind | "text" } & (
   | { status: "parsing" }
   | { status: "ready"; text: string; pageCount: number; hasImages: boolean }
   | { status: "error"; error: string }
@@ -28,7 +29,8 @@ export function useResumeFiles() {
 
   const nextId = useRef(1);
   const controllers = useRef(new Map<number, AbortController>());
-  // Parse one PDF at a time so 20 large files don't compete for the CPU.
+  // Read one file at a time so 50 large files don't compete for the CPU.
+  // Each file gets its own result, so one bad file never stops the rest.
   const queue = useRef<Promise<void>>(Promise.resolve());
 
   useEffect(() => {
@@ -36,14 +38,15 @@ export function useResumeFiles() {
     return () => pending.forEach((controller) => controller.abort());
   }, []);
 
-  const parse = useCallback((id: number, file: File, signal: AbortSignal) => {
+  const parse = useCallback((id: number, file: File, source: ResumeFileKind, signal: AbortSignal) => {
+    const extract = source === "docx" ? extractDocxText : extractPdfText;
     queue.current = queue.current.then(async () => {
       if (signal.aborted) return;
-      let result: Awaited<ReturnType<typeof extractPdfText>>;
+      let result: ExtractResult;
       try {
         // Stop waiting as soon as the file is removed, so the queue moves on
         // even if pdfjs never settles after being cancelled.
-        result = await Promise.race([extractPdfText(file, signal), whenAborted(signal)]);
+        result = await Promise.race([extract(file, signal), whenAborted(signal)]);
       } catch {
         result = { ok: false, error: "This file couldn't be read." };
       }
@@ -55,8 +58,8 @@ export function useResumeFiles() {
           if (entry.id !== id) return entry;
           const { name, size } = entry;
           return result.ok
-            ? { id, name, size, source: "pdf", status: "ready", text: result.text, pageCount: result.pageCount, hasImages: result.hasImages }
-            : { id, name, size, source: "pdf", status: "error", error: result.error };
+            ? { id, name, size, source, status: "ready", text: result.text, pageCount: result.pageCount, hasImages: result.hasImages }
+            : { id, name, size, source, status: "error", error: result.error };
         }),
       );
     });
@@ -79,11 +82,12 @@ export function useResumeFiles() {
           continue;
         }
 
+        const source = resumeFileKind(file) ?? "pdf"; // checkResumeFile accepted it
         const id = nextId.current++;
         const controller = new AbortController();
         controllers.current.set(id, controller);
-        added.push({ id, name: file.name, size: file.size, source: "pdf", status: "parsing" });
-        parse(id, file, controller.signal);
+        added.push({ id, name: file.name, size: file.size, source, status: "parsing" });
+        parse(id, file, source, controller.signal);
       }
 
       setRejections(rejected);
@@ -127,7 +131,12 @@ export function useResumeFiles() {
     setFiles((current) => current.filter((entry) => entry.id !== id));
   }, []);
 
+  // With up to 50 files, removing unreadable ones one by one is tedious.
+  const removeFailed = useCallback(() => {
+    setFiles((current) => current.filter((entry) => entry.status !== "error"));
+  }, []);
+
   const dismissRejections = useCallback(() => setRejections([]), []);
 
-  return { files, rejections, addFiles, addText, removeFile, dismissRejections };
+  return { files, rejections, addFiles, addText, removeFile, removeFailed, dismissRejections };
 }

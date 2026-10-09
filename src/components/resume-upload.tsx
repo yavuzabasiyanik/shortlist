@@ -48,7 +48,7 @@ export function ResumeUpload({ files, rejections, onAdd, onAddText, onRemove, on
       <div role="group" aria-label="How to add resumes" className="mt-2.5 grid grid-cols-2 gap-1 rounded-lg bg-stone-100 p-1 text-sm font-medium">
         {(
           [
-            ["pdf", "Upload PDFs"],
+            ["pdf", "Upload files"],
             ["text", "Paste text"],
           ] as const
         ).map(([value, label]) => (
@@ -84,7 +84,7 @@ export function ResumeUpload({ files, rejections, onAdd, onAddText, onRemove, on
         >
           <input
             type="file"
-            accept="application/pdf,.pdf"
+            accept="application/pdf,.pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,.docx"
             multiple
             aria-labelledby="resumes-label"
             aria-describedby="resume-limits"
@@ -96,10 +96,10 @@ export function ResumeUpload({ files, rejections, onAdd, onAddText, onRemove, on
           />
           <UploadIcon className="h-5 w-5 text-stone-500" />
           <span className="mt-1.5 text-sm font-medium text-stone-800">
-            Drop PDFs here or <span className="text-teal-800 underline underline-offset-4">choose files</span>
+            Drop PDF or Word files here or <span className="text-teal-800 underline underline-offset-4">choose files</span>
           </span>
           <span id="resume-limits" className="mt-1 text-xs text-stone-600">
-            PDF only · 5 MB each · up to {MAX_RESUMES} resumes in total
+            PDF or DOCX · 5 MB each · up to {MAX_RESUMES} resumes in total
           </span>
         </label>
       ) : (
@@ -209,7 +209,7 @@ export function ResumeUpload({ files, rejections, onAdd, onAddText, onRemove, on
 
 function FileStatus({ file, onPasteInstead }: { file: ResumeFile; onPasteInstead: () => void }) {
   if (file.status === "parsing") {
-    return <p className="mt-0.5 text-xs text-stone-600">Reading PDF…</p>;
+    return <p className="mt-0.5 text-xs text-stone-600">Reading {file.source === "docx" ? "DOCX" : "PDF"}…</p>;
   }
   if (file.status === "error") {
     return <p className="mt-0.5 text-xs text-red-700">{file.error}</p>;

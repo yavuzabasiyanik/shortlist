@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RankEvent } from "@/lib/ranking/events";
+import { MAX_REQUEST_BODY_BYTES } from "@/lib/limits";
 import type { ResumeOutcome } from "@/lib/ranking/schema";
 
 export type RunStatus = "idle" | "running" | "done" | "cancelled" | "interrupted" | "failed";
@@ -44,11 +45,23 @@ export function useLiveRanking() {
 
     const fail = (status: RunStatus, error: string | null) => setState((s) => ({ ...s, status, error }));
 
+    // 50 long resumes can exceed the request limit (mostly with non-Latin
+    // text, which takes more bytes). Say so before sending, so the server's
+    // 413 is never the first notice and no daily run is involved.
+    const body = JSON.stringify({ jobDescription, resumes: resumes.map(({ id, fileName, text }) => ({ id, fileName, text })) });
+    const bytes = new TextEncoder().encode(body).byteLength;
+    if (bytes > MAX_REQUEST_BODY_BYTES) {
+      const mb = (n: number) => (n / 1_000_000).toLocaleString("en-US", { maximumFractionDigits: 1 });
+      fail("failed", `These ${resumes.length} resumes add up to ${mb(bytes)} MB of text, over the ${mb(MAX_REQUEST_BODY_BYTES)} MB limit for one ranking. Remove some resumes or rank them in two batches.`);
+      controller.current = null;
+      return;
+    }
+
     try {
       const response = await fetch("/api/rank", {
         method: "POST",
         headers: { "content-type": "application/json" },
-        body: JSON.stringify({ jobDescription, resumes: resumes.map(({ id, fileName, text }) => ({ id, fileName, text })) }),
+        body,
         signal: abort.signal,
       });
 

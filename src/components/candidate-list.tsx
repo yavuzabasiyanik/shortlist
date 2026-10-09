@@ -12,10 +12,12 @@ export type CandidateRow = {
   candidateName: string;
   fileName?: string;
   score: number;
+  // One-line main reason for the score, from the same model response.
+  reason: string;
   strengths: string[];
   gaps: string[];
   explanation: string;
-  // The PDF contained images whose text wasn't scored.
+  // The PDF or DOCX contained images whose text wasn't scored.
   textOnly?: boolean;
 };
 
@@ -91,6 +93,11 @@ export function CandidateList({ rows }: { rows: CandidateRow[] }) {
                     {IMAGES_NOTICE}
                   </p>
                 )}
+
+                <p className="mt-2 text-sm leading-snug text-stone-800">
+                  <span className="sr-only">Main reason: </span>
+                  {row.reason}
+                </p>
 
                 <div className="mt-2.5 grid gap-x-5 gap-y-3 sm:grid-cols-2">
                   <Evidence title="Strengths" items={row.strengths} icon={<CheckIcon className="mt-0.5 h-4 w-4 shrink-0 text-stone-600" />} />

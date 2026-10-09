@@ -17,6 +17,7 @@ export type ScoringErrorKind =
   | "refusal"
   | "timeout"
   | "truncated"
+  | "too_long"
   | "provider_error"
   | "run_stop"
   | "cancelled";
@@ -36,6 +37,7 @@ const MESSAGES: Record<Exclude<ScoringErrorKind, "run_stop" | "cancelled">, stri
   refusal: "The model declined to score this resume.",
   timeout: "Scoring timed out.",
   truncated: "The scoring response was cut off.",
+  too_long: "This resume is too long to score: it is over the 50,000-token limit per resume. Paste a shorter version.",
   provider_error: "The AI provider returned an error for this resume.",
 };
 

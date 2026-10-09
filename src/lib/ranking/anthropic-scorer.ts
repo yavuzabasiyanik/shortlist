@@ -3,10 +3,19 @@ import { ScoringError, type Scorer } from "@/lib/ranking/score";
 import type { Logger } from "@/lib/ranking/log";
 
 // Cost and time bounds for one scoring call.
-// Worst case per call on claude-haiku-5-5 ($0.10 in / $0.50 out per MTok,
-// prompts under 100K tokens): ~13K input tokens + 2,000 output tokens ≈ $0.0023.
+// Character limits don't bound tokens: a 30,000-character resume measured
+// 14.6K tokens as English prose but 162K as "&" or "<" (escaped), and Haiku
+// 5.5 prices prompts over 100K tokens 5× higher. So each prompt is counted
+// first (free, no model run) and refused above MAX_INPUT_TOKENS. The largest
+// real text measured, a full-length CJK resume and job, was 44K tokens.
+// Worst case per call ($0.10 in / $0.50 out per MTok under 100K tokens):
+// 50,000 × $0.10/M + 2,000 × $0.50/M = $0.006.
+export const MAX_INPUT_TOKENS = 50_000;
 export const MAX_OUTPUT_TOKENS = 2_000;
 export const CALL_TIMEOUT_MS = 30_000;
+// The count runs before the call, so both fit inside the run deadline
+// (run.ts): 240 s + 10 s + 30 s < the route's 300 s maxDuration.
+export const COUNT_TIMEOUT_MS = 10_000;
 // The SDK retries 408/409/429/5xx twice by default. A failed call is
 // reported as a failed resume instead, so the number of billed calls can
 // never exceed the number of resumes.
@@ -20,11 +29,12 @@ const OUTPUT_SCHEMA = {
   properties: {
     candidateName: { type: "string", description: 'The name as written in the resume, or "" if none appears.' },
     score: { type: "integer", description: "Whole number from 0 to 100." },
+    reason: { type: "string", description: "One short sentence, at most 20 words." },
     strengths: { type: "array", items: { type: "string" }, description: "Exactly 3 items." },
     gaps: { type: "array", items: { type: "string" }, description: "Exactly 2 items." },
     explanation: { type: "string", description: "2-3 sentences." },
   },
-  required: ["candidateName", "score", "strengths", "gaps", "explanation"],
+  required: ["candidateName", "score", "reason", "strengths", "gaps", "explanation"],
   additionalProperties: false,
 };
 
@@ -41,21 +51,24 @@ export function createAnthropicScorer({ apiKey, model, log, timeoutMs = CALL_TIM
 
   return async ({ system, user }, signal) => {
     const started = Date.now();
+    const request = {
+      model,
+      system,
+      messages: [{ role: "user" as const, content: user }],
+      // No `temperature`: claude-haiku-5-5 rejects any non-default value
+      // with a 400. Structured output and low effort keep scores steady.
+      output_config: { effort: "low" as const, format: { type: "json_schema" as const, schema: OUTPUT_SCHEMA } },
+    };
     let message: Anthropic.Message;
     try {
-      message = await client.messages.create(
-        {
-          model,
-          max_tokens: MAX_OUTPUT_TOKENS,
-          system,
-          messages: [{ role: "user", content: user }],
-          // No `temperature`: claude-haiku-5-5 rejects any non-default value
-          // with a 400. Structured output and low effort keep scores steady.
-          output_config: { effort: "low", format: { type: "json_schema", schema: OUTPUT_SCHEMA } },
-        },
-        { signal },
-      );
+      const { input_tokens } = await client.messages.countTokens(request, { signal, timeout: COUNT_TIMEOUT_MS });
+      if (input_tokens > MAX_INPUT_TOKENS) {
+        log("rank.input_too_long", { input_tokens, ms: Date.now() - started });
+        throw new ScoringError("too_long");
+      }
+      message = await client.messages.create({ ...request, max_tokens: MAX_OUTPUT_TOKENS }, { signal });
     } catch (error) {
+      if (error instanceof ScoringError) throw error;
       const kind = classify(error);
       log("rank.model_error", {
         kind,

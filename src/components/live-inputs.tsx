@@ -23,16 +23,17 @@ type Props = {
 };
 
 export function LiveInputs({ liveEnabled, jobDescription, onJobDescriptionChange, resumes, run, onRank, onCancel, onJumpToResults, method, onMethodChange, draft, onDraftChange }: Props) {
-  const { files, rejections, addFiles, addText, removeFile, dismissRejections } = resumes;
+  const { files, rejections, addFiles, addText, removeFile, removeFailed, dismissRejections } = resumes;
   const running = run.status === "running";
 
   const { parsing, failed, resumesReady, ready } = inputReadiness(jobDescription, files);
   const canRank = ready && liveEnabled && !running;
 
-  let resumeStatus = "Add at least one PDF or pasted resume.";
-  if (parsing) resumeStatus = `Reading ${parsing} ${parsing === 1 ? "PDF" : "PDFs"}…`;
+  let resumeStatus = "Add at least one PDF, DOCX, or pasted resume.";
+  if (parsing) resumeStatus = `Reading ${parsing} ${parsing === 1 ? "file" : "files"}…`;
   else if (failed) resumeStatus = `Remove ${failed} ${failed === 1 ? "file" : "files"} that couldn't be read.`;
   else if (files.length) resumeStatus = `${files.length} ${files.length === 1 ? "resume" : "resumes"} ready.`;
+  const failedNames = files.flatMap((file) => (file.status === "error" ? [file.name] : []));
 
   return (
     <div className="space-y-6">
@@ -54,6 +55,20 @@ export function LiveInputs({ liveEnabled, jobDescription, onJobDescriptionChange
         <ul className="space-y-1 text-sm" aria-label="Ranking checklist">
           <ChecklistItem done={resumesReady}>Resumes: {resumeStatus}</ChecklistItem>
         </ul>
+        {!parsing && failed > 0 && (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-900">
+            <p>
+              Couldn&apos;t read: <span className="break-words font-mono text-xs">{failedNames.join(", ")}</span>. Each file&apos;s reason is shown in the list above. The other resumes are unaffected.
+            </p>
+            <button
+              type="button"
+              onClick={removeFailed}
+              className="mt-2 rounded-lg border border-red-300 bg-white px-3 py-1.5 text-xs font-medium text-red-900 hover:bg-red-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-teal-700"
+            >
+              Remove {failed === 1 ? "this file" : `these ${failed} files`}
+            </button>
+          </div>
+        )}
 
         <div className="flex gap-2">
           <button
@@ -89,7 +104,7 @@ export function LiveInputs({ liveEnabled, jobDescription, onJobDescriptionChange
         <p className="flex gap-2 text-xs leading-relaxed text-stone-600">
           <LockIcon className="mt-0.5 h-3.5 w-3.5 shrink-0" />
           <span>
-            PDFs stay in your browser. Extracted or pasted text is sent to Anthropic for scoring. Shortlist doesn&apos;t save your resumes or results.
+            Files stay in your browser. Extracted or pasted text is sent to Anthropic for scoring. Shortlist doesn&apos;t save your resumes or results.
           </span>
         </p>
 
